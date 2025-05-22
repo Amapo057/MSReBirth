@@ -16,7 +16,7 @@ public class playerController : MonoBehaviour
     public Transform hitboxController;
 
     public float moveSpeed = 2f;
-    private bool isAttack = false;
+    public bool isAttack = false;
     void Awake()
     {
         // inputActions 불러오기

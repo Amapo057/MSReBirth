@@ -3,10 +3,12 @@ using System.Collections.Generic;
 using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-
+using TMPro;
 public class SceneController : MonoBehaviour
 {
     public TyrController tyr;
+    public PlayerAgent player;
+    public TextMeshProUGUI playerHP;
     // Start is called before the first frame update
     void Start()
     {
@@ -15,10 +17,6 @@ public class SceneController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        if (tyr.tyrHP <= 0)
-        {
-            SceneManager.LoadScene("AItest");
-            
-        }
+        playerHP.SetText("Player HP : {0}", player.playerHP);        
     }
 }

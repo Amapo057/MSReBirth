@@ -1,186 +1,320 @@
 using UnityEngine;
+using System.Collections; // ì½”ë£¨í‹´ ì‚¬ìš©ì„ ìœ„í•´ ì¶”ê°€
 using Unity.MLAgents;
 using Unity.MLAgents.Actuators;
 using Unity.MLAgents.Sensors;
 
-public class PlayerMLAgent : Agent
+// ActionManager í´ë˜ìŠ¤ê°€ ì •ì˜ëœ ë„¤ì„ìŠ¤í˜ì´ìŠ¤ë¥¼ ì—¬ê¸°ì— ì¶”ê°€í•´ì•¼ í•  ìˆ˜ ìˆìŠµë‹ˆë‹¤.
+// ì˜ˆ: using YourProjectName.InputSystem;
+
+public class PlayerAgent : Agent
 {
-    private playerController controller; // ±âÁ¸ playerController ÂüÁ¶
+    [Header("Agent Movement Settings")]
+    public float agentMoveSpeed = 5f;
+
+    [Header("Agent Attack Settings")]
+    public GameObject agentAttackHitBox;
+    public Transform agentHitboxController;
+    private bool agentIsAttack = false;
+
+    [Header("Target Boss Reference")]
+    public TyrController tyr; // TyrController ìŠ¤í¬ë¦½íŠ¸ ì»´í¬ë„ŒíŠ¸ ì°¸ì¡°
+
+    [Header("Player Stats")]
+    public float playerMaxHP = 3f;
+    public float playerHP;
+    public float invincibilityDuration = 1f; // í”¼ê²© í›„ ë¬´ì  ì‹œê°„ (ì´ˆ)
+    private bool isInvincible = false;      // í˜„ì¬ ë¬´ì  ìƒíƒœì¸ì§€
+    private Vector3 initailPlayerPosition;
+
+    [Header("Rewards")]
+    public float rewardDefeatTyr = 1.0f;
+    public float penaltyPlayerDeath = -1.0f;
+    public float rewardHitTyr = 0.5f;
+    public float penaltyPlayerHit = -0.2f;
+    public float penaltyTimeStep = -0.001f; // ë§¤ ì˜ì‚¬ê²°ì • ìŠ¤í…ë§ˆë‹¤ ë°›ì„ ì‹œê°„ íŒ¨ë„í‹°
+    public float rewardAttemptAttack = 0.02f; // ê³µê²© ì‹œë„ ì‹œ ë°›ëŠ” ì‘ì€ ë³´ìƒ
+
+    public float penaltyDistanceToTyrMultiplier = -0.0001f; // Tyrì™€ì˜ ê±°ë¦¬ì— ë”°ë¥¸ íŒ¨ë„í‹° ë°°ìœ¨ (ë§¤ìš° ì‘ì€ ìŒìˆ˜ ê°’)
+
     private Rigidbody rb;
     private Animator animator;
-    private Transform hitboxController; // playerControllerÀÇ hitboxController ÂüÁ¶
+    private ActionManager inputActions;
 
-    // ¿¡ÇÇ¼Òµå´ç ÃÖ´ë ½ºÅÜ (¼±ÅÃ »çÇ×, Inspector¿¡¼­ ¼³Á¤ °¡´É)
-    // public int maxStepsPerEpisode = 5000;
-    // private int currentStep = 0;
-
-    public override void Initialize()
+    void Awake()
     {
-        controller = GetComponent<playerController>();
         rb = GetComponent<Rigidbody>();
         animator = GetComponent<Animator>();
-
-        if (controller != null)
+        try
         {
-            hitboxController = controller.hitboxController;
-            // controller.moveSpeed ¿Í °°Àº °ªµµ ÇÊ¿äÇÏ´Ù¸é ¿©±â¼­ °¡Á®¿À°Å³ª Á÷Á¢ ¼³Á¤ÇÒ ¼ö ÀÖ½À´Ï´Ù.
+            inputActions = new ActionManager();
         }
-        else
+        catch (System.Exception e)
         {
-            Debug.LogError("PlayerController¸¦ Ã£À» ¼ö ¾ø½À´Ï´Ù. PlayerMLAgent¿Í °°Àº GameObject¿¡ ÀÖ´ÂÁö È®ÀÎÇØÁÖ¼¼¿ä.");
+            Debug.LogError($"[PlayerAgent] Awake: ActionManager ì¸ìŠ¤í„´ìŠ¤ ìƒì„± ì‹¤íŒ¨ - {e.Message}. ìŠ¤í¬ë¦½íŠ¸ë¥¼ ë¹„í™œì„±í™”í•©ë‹ˆë‹¤.", this);
+            this.enabled = false;
+            return;
+        }
+
+        initailPlayerPosition = transform.localPosition;
+
+        if (rb == null) Debug.LogError("[PlayerAgent] Awake: Rigidbody ì»´í¬ë„ŒíŠ¸ë¥¼ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤!", this);
+        if (animator == null) Debug.LogError("[PlayerAgent] Awake: Animator ì»´í¬ë„ŒíŠ¸ë¥¼ ì°¾ì„ ìˆ˜ ì—†ìŠµë‹ˆë‹¤!", this);
+        if (tyr == null) Debug.LogError("[PlayerAgent] Awake: Tyr ì°¸ì¡°ê°€ Inspectorì—ì„œ í• ë‹¹ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤!", this);
+        if (agentAttackHitBox == null) Debug.LogWarning("[PlayerAgent] Awake: agentAttackHitBoxê°€ Inspectorì—ì„œ í• ë‹¹ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.", this);
+        if (agentHitboxController == null) Debug.LogWarning("[PlayerAgent] Awake: agentHitboxControllerê°€ Inspectorì—ì„œ í• ë‹¹ë˜ì§€ ì•Šì•˜ìŠµë‹ˆë‹¤.", this);
+        if (agentMoveSpeed <= 0) Debug.LogWarning($"[PlayerAgent] Awake: agentMoveSpeedê°€ 0 ì´í•˜({agentMoveSpeed})ì…ë‹ˆë‹¤.", this);
+    }
+
+    protected override void OnEnable()
+    {
+        base.OnEnable();
+        Debug.Log("[PlayerAgent] OnEnable: ì—ì´ì „íŠ¸ í™œì„±í™” ë° ì…ë ¥ ì‹œìŠ¤í…œ í™œì„±í™” ì‹œë„.");
+        if (inputActions != null)
+        {
+            try { inputActions.playerAction.Enable(); }
+            catch (System.Exception e) { Debug.LogError($"[PlayerAgent] OnEnable: inputActions.playerAction í™œì„±í™” ì‹¤íŒ¨ - {e.Message}", this); }
+        }
+        else { Debug.LogError("[PlayerAgent] OnEnable: inputActions (ActionManager)ê°€ nullì…ë‹ˆë‹¤.", this); }
+    }
+
+    protected override void OnDisable()
+    {
+        base.OnDisable();
+        if (inputActions != null)
+        {
+            try { inputActions.playerAction.Disable(); }
+            catch (System.Exception e) { Debug.LogError($"[PlayerAgent] OnDisable: inputActions.playerAction ë¹„í™œì„±í™” ì‹¤íŒ¨ - {e.Message}", this); }
         }
     }
 
     public override void OnEpisodeBegin()
     {
-        // ¿¡ÇÇ¼Òµå ½ÃÀÛ ½Ã È£ÃâµÉ ·ÎÁ÷
-        // ¿¹: ÇÃ·¹ÀÌ¾î À§Ä¡, º¸½º À§Ä¡, Ã¼·Â µî ÃÊ±âÈ­
-        // transform.localPosition = new Vector3(0, 0.5f, 0); // ¿¹½Ã ½ÃÀÛ À§Ä¡
-        // if (controller != null)
-        // {
-        //    controller.isAttack = false; // °ø°İ »óÅÂ ÃÊ±âÈ­
-        //    // ÇÊ¿äÇÏ´Ù¸é animator.ResetTrigger("playerAttack"); µî ¾Ö´Ï¸ŞÀÌ¼Ç »óÅÂµµ ÃÊ±âÈ­
-        // }
-        // currentStep = 0; // ½ºÅÜ Ä«¿îÅÍ ÃÊ±âÈ­
+        agentIsAttack = false;
+        isInvincible = false;
+        playerHP = playerMaxHP;
+
+        transform.localPosition = initailPlayerPosition;
+
+        if (rb != null)
+        {
+            rb.velocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+        }
+        // í”Œë ˆì´ì–´ ìœ„ì¹˜ë„ ì´ˆê¸° ìœ„ì¹˜ë¡œ ë¦¬ì…‹í•˜ëŠ” ê²ƒì´ ì¢‹ìŠµë‹ˆë‹¤ (í•„ìš”í•˜ë‹¤ë©´)
+        // transform.localPosition = playerInitialPosition;
+
+
+        // Tyr ìƒíƒœ ì´ˆê¸°í™” í˜¸ì¶œ
+        if (tyr != null)
+        {
+            tyr.ResetTyrState();
+            Debug.Log("[PlayerAgent] OnEpisodeBegin - tyr.ResetTyrState() CALLED");
+        }
+        else
+        {
+            Debug.LogWarning("[PlayerAgent] OnEpisodeBegin: Tyr ì°¸ì¡°ê°€ nullì´ì–´ì„œ Tyr ìƒíƒœë¥¼ ì´ˆê¸°í™”í•  ìˆ˜ ì—†ìŠµë‹ˆë‹¤.");
+        }
     }
 
     public override void CollectObservations(VectorSensor sensor)
     {
-        // === °üÂû ¿ä¼Ò Á¤ÀÇ (´ÙÀ½ ´Ü°è¿¡¼­ »ó¼¼È­) ===
-        // ¿¹½Ã:
-        // 1. ÇÃ·¹ÀÌ¾î ÀÚ½ÅÀÇ Á¤º¸
-        //    - À§Ä¡ (X, Z) relative to some anchor or absolute
-        //    - ÇöÀç ¼Óµµ (X, Z) (rb.velocity)
-        //    - ÇöÀç ¹Ù¶óº¸´Â ¹æÇâ (hitboxController.forward or localRotation)
-        //    - °ø°İ °¡´É »óÅÂ (controller.isAttack ? 0f : 1f)
-        // sensor.AddObservation(transform.localPosition);
-        // sensor.AddObservation(rb.velocity.x);
-        // sensor.AddObservation(rb.velocity.z);
-        // sensor.AddObservation(hitboxController.forward); // ¶Ç´Â °¢µµ
-        // sensor.AddObservation(controller.isAttack ? 0f : 1f); // °ø°İ ÁßÀÌ¸é 0, ¾Æ´Ï¸é 1
+        float arenaHalfWidthX = 7.0f;
+        float arenaHalfDepthZ = 2.5f;
+        float estimatedMaxDistance = 15.0f;
 
-        // 2. º¸½º Á¤º¸
-        //    - º¸½º À§Ä¡ (X, Z)
-        //    - ÇÃ·¹ÀÌ¾î·ÎºÎÅÍ º¸½º±îÁöÀÇ »ó´ëÀû À§Ä¡/¹æÇâ º¤ÅÍ
-        //    - º¸½º Ã¼·Â (Á¤±ÔÈ­µÈ °ª)
-        //    - º¸½ºÀÇ ÇöÀç »óÅÂ/Çàµ¿ (¿¹: °ø°İ ÁØºñ Áß, ÀÌµ¿ Áß µî) - °¡´ÉÇÏ´Ù¸é
-        // GameObject boss = GameObject.FindGameObjectWithTag("Boss"); // ¿¹½Ã
-        // if (boss != null)
-        // {
-        //    sensor.AddObservation(boss.transform.localPosition);
-        //    sensor.AddObservation(boss.transform.localPosition - transform.localPosition);
-        //    // sensor.AddObservation(boss.GetComponent<BossScript>().currentHealth / boss.GetComponent<BossScript>().maxHealth);
-        // }
+        sensor.AddObservation(transform.localPosition.x / arenaHalfWidthX);
+        sensor.AddObservation(transform.localPosition.z / arenaHalfDepthZ);
+        if (agentHitboxController != null)
+        {
+            sensor.AddObservation(agentHitboxController.forward.x);
+            sensor.AddObservation(agentHitboxController.forward.z);
+        }
+        else { sensor.AddObservation(0f); sensor.AddObservation(1f); }
+        sensor.AddObservation(agentIsAttack ? 0f : 1f);
+        sensor.AddObservation(playerHP / playerMaxHP);
+        sensor.AddObservation(isInvincible ? 1f : 0f); // ë¬´ì  ìƒíƒœ ê´€ì°° -> Space Size +1 (í˜„ì¬ ì´ 16)
 
-        // 3. ±âÅ¸ È¯°æ Á¤º¸
-        //    - º®ÀÌ³ª Àå¾Ö¹°°úÀÇ °Å¸® (Raycast »ç¿ë °¡´É)
+        if (tyr == null)
+        {
+            for (int i = 0; i < 9; i++) sensor.AddObservation(0f);
+            if (Time.frameCount % 100 == 0) Debug.LogWarning("[PlayerAgent] CollectObservations: Tyr ì°¸ì¡°ê°€ nullì…ë‹ˆë‹¤.", this);
+            return;
+        }
+        Vector3 tyrPosition = tyr.transform.localPosition;
+        sensor.AddObservation(tyrPosition.x / arenaHalfWidthX);
+        sensor.AddObservation(tyrPosition.z / arenaHalfDepthZ);
+        Vector3 relativePosToTyr = tyrPosition - transform.localPosition;
+        sensor.AddObservation(relativePosToTyr.x / estimatedMaxDistance);
+        sensor.AddObservation(relativePosToTyr.z / estimatedMaxDistance);
+        sensor.AddObservation(relativePosToTyr.magnitude / estimatedMaxDistance);
+        if (tyr.tyrMaxHP > 0) { sensor.AddObservation(tyr.tyrHP / tyr.tyrMaxHP); }
+        else { sensor.AddObservation(0f); }
+        sensor.AddObservation(tyr.isWalk ? 1f : 0f);
+        sensor.AddObservation(tyr.isAttack ? 1f : 0f);
+        sensor.AddObservation(tyr.isReady ? 1f : 0f);
     }
 
-    public override void OnActionReceived(ActionBuffers actions)
-    {
-        // ¿¡ÀÌÀüÆ®°¡ °áÁ¤ÇÑ Çàµ¿À» ½ÇÇà
-        // ÀÌ Agent°¡ È°¼ºÈ­ µÇ¾î ÀÖÀ» ¶§´Â playerControllerÀÇ Update/FixedUpdate´Â »ç¿ëÀÚ ÀÔ·Â Ã³¸®¸¦ ÇÏÁö ¾Ê´Â´Ù°í °¡Á¤
-
-        // currentStep++; // ½ºÅÜ Ä«¿îÅÍ Áõ°¡
-        // if (maxStepsPerEpisode > 0 && currentStep >= maxStepsPerEpisode)
-        // {
-        //    // ÃÖ´ë ½ºÅÜ µµ´Ş ½Ã ¿¡ÇÇ¼Òµå Á¾·á (½Ã°£ ÃÊ°ú)
-        //    SetReward(-1.0f); // ¿¹½Ã: ½Ã°£ ÃÊ°ú ½Ã À½ÀÇ º¸»ó
-        //    EndEpisode();
-        // }
-
-        // ¿¬¼Ó Çàµ¿: XÃà ÀÌµ¿, ZÃà ÀÌµ¿
-        float moveX = actions.ContinuousActions[0];
-        float moveZ = actions.ContinuousActions[1];
-
-        // ÀÌ»ê Çàµ¿: °ø°İ (0: ¾ÈÇÔ, 1: ÇÔ)
-        int attackAction = actions.DiscreteActions[0];
-
-        // --- ÀÌµ¿ Ã³¸® ---
-        if (controller != null && !controller.isAttack) // playerControllerÀÇ isAttack »óÅÂ¸¦ Á÷Á¢ ÂüÁ¶
-        {
-            Vector3 moveDirection = new Vector3(moveX, 0f, moveZ);
-            // playerControllerÀÇ moveSpeed »ç¿ë
-            Vector3 targetVelocity = moveDirection.normalized * controller.moveSpeed;
-            // ±âÁ¸ playerControllerÀÇ FixedUpdate ·ÎÁ÷ Àû¿ë
-            targetVelocity.z *= 1.5f;
-            targetVelocity.y = rb.velocity.y; // Áß·Â µî YÃà ¿òÁ÷ÀÓÀº À¯Áö
-            rb.velocity = targetVelocity;
-
-            // ¾Ö´Ï¸ŞÀÌÅÍ ¹× È÷Æ®¹Ú½º ¹æÇâ ¾÷µ¥ÀÌÆ® (playerControllerÀÇ Update ·ÎÁ÷ ÂüÁ¶)
-            float inputMagnitude = moveDirection.magnitude;
-            animator.SetFloat("playerWalkSpeed", inputMagnitude);
-
-            if (inputMagnitude > 0.01f) // ¾à°£ÀÇ DeadzoneÀ» µÎ¾î ÀÛÀº ¿òÁ÷ÀÓ ¹«½Ã
-            {
-                // playerController´Â inputWalk.y¸¦ playerDirectionY·Î »ç¿ëÇßÀ¸¹Ç·Î, moveZ¸¦ »ç¿ë
-                animator.SetFloat("playerDirectionX", moveX);
-                animator.SetFloat("playerDirectionY", moveZ);
-
-                // È÷Æ®¹Ú½º(Ä³¸¯ÅÍ) ¹æÇâ ÀüÈ¯
-                // ±âÁ¸ ·ÎÁ÷: XÃà ÀÔ·Â¿¡ µû¶ó ÁÂ¿ì 180µµ È¸Àü, YÃà(ZÃà ÀÔ·Â)¿¡ µû¶ó¼­´Â ÀüÈÄ ¹æÇâÀ» ¹Ù¶óº¸µµ·Ï ÇÏ´Â °ÍÀÌ ÀÏ¹İÀûÀÔ´Ï´Ù.
-                // ÇöÀç playerController´Â XÃà ÀÔ·ÂÀ¸·Î¸¸ ÁÂ¿ì¸¦ °áÁ¤ÇÏ°í, YÃà ÀÔ·ÂÀ¸·Î´Â localRotationÀ» ÀÌ»óÇÏ°Ô ¼³Á¤ÇÏ°í ÀÖ½À´Ï´Ù.
-                // 3D È¯°æÀÌ¹Ç·Î, Ä³¸¯ÅÍ°¡ ÀÌµ¿ÇÏ´Â ¹æÇâÀ» ÀÚ¿¬½º·´°Ô ¹Ù¶óº¸µµ·Ï ¼öÁ¤ÇÏ´Â °ÍÀ» ±ÇÀåÇÕ´Ï´Ù.
-                // ¿¹½Ã: if (moveDirection.sqrMagnitude > 0.01f) transform.rotation = Quaternion.LookRotation(moveDirection);
-                // ¿ì¼±Àº ±âÁ¸ playerControllerÀÇ XÃà ±â¹İ È¸Àü ·ÎÁ÷À» ÃÖ´ëÇÑ µû¸£µÇ, ZÃà¿¡ ´ëÇÑ ºÎºĞÀº ÁÖ¼® Ã³¸®ÇÕ´Ï´Ù.
-                if (moveX > 0.01f)
-                {
-                    hitboxController.localRotation = Quaternion.Euler(0, 0, 0); // ¿À¸¥ÂÊ º¸µµ·Ï
-                }
-                else if (moveX < -0.01f)
-                {
-                    // ±âÁ¸ ÄÚµå: hitboxController.rotation = Quaternion.Euler(0, -180, 0);
-                    // localRotationÀ» »ç¿ëÇÏ´Â °ÍÀÌ ÀÏ¹İÀûÀ¸·Î ´õ ¿¹Ãø °¡´ÉÇÕ´Ï´Ù.
-                    hitboxController.localRotation = Quaternion.Euler(0, 180, 0); // ¿ŞÂÊ º¸µµ·Ï
-                }
-                // else if (moveZ != 0) // ±âÁ¸ ÄÚµå: inputWalk.y != 0
-                // {
-                //    // hitboxController.localRotation = Quaternion.Euler(0, -moveZ * 90, 0); // ÀÌ ·ÎÁ÷Àº ZÃà ÀÌµ¿¿¡ µû¶ó 90µµ È¸ÀüÇÏ´Âµ¥, 3D ÀüÅõ¿¡¼­´Â ºÎÀÚ¿¬½º·¯¿ï ¼ö ÀÖÀ½
-                // }
-            }
-        }
-
-        // --- °ø°İ Ã³¸® ---
-        // °ø°İ ½ÇÇà Á¶°Ç: °ø°İ ¾×¼ÇÀÌ ¼±ÅÃµÇ¾ú°í, ÇöÀç °ø°İ ÁßÀÌ ¾Æ´Ò ¶§
-        if (attackAction == 1 && controller != null && !controller.isAttack)
-        {
-            animator.SetTrigger("playerAttack");
-            // playerControllerÀÇ OnAttack()Àº InputSystem Äİ¹éÀÌ¶ó Á÷Á¢ È£ÃâÇÏÁö ¾ÊÀ½.
-            // ´ë½Å, playerAttack ¾Ö´Ï¸ŞÀÌ¼ÇÀÌ ½ÃÀÛµÇ¸é ¾Ö´Ï¸ŞÀÌ¼Ç ÀÌº¥Æ®°¡ playerControllerÀÇ
-            // HitboxActive()¸¦ È£ÃâÇÏ°í, isAttack = true·Î ¼³Á¤ÇÏ´Â ·ÎÁ÷ÀÌ ÀÖ´Ù¸é ±×°ÍÀ» µû¸¨´Ï´Ù.
-            // (playerControllerÀÇ OnAttack ÇÔ¼ö ³»ºÎ¿¡ isAttack = true; °¡ ÀÖÀ¸¹Ç·Î,
-            //  ML-Agent°¡ animator.SetTrigger("playerAttack")¸¦ ÇÏ¸é,
-            //  playerControllerÀÇ °ø°İ ¾Ö´Ï¸ŞÀÌ¼ÇÀÌ Àç»ıµÇ°í, °ü·Ã »óÅÂ(isAttack)¿Í È÷Æ®¹Ú½º´Â
-            //  playerControllerÀÇ ¾Ö´Ï¸ŞÀÌ¼Ç ÀÌº¥Æ® ÇÚµé·¯µéÀÌ Ã³¸®ÇÒ °ÍÀ¸·Î ±â´ëÇÕ´Ï´Ù.)
-            //  ¸¸¾à playerController.OnAttack()ÀÇ isAttack = true ¼³Á¤ÀÌ Äİ¹é ÇÔ¼ö ¾È¿¡¸¸ ÀÖ´Ù¸é,
-            //  Agent°¡ °ø°İÀ» ½ÃÀÛÇÒ ¶§ controller.isAttack = true; ¸¦ Á÷Á¢ ¼³Á¤ÇÏ°Å³ª,
-            //  playerController¿¡ Agent¿ë °ø°İ ½ÃÀÛ ÇÔ¼ö¸¦ ¸¸µé¾î¾ß ÇÒ ¼öµµ ÀÖ½À´Ï´Ù.
-            //  (ÀÏ´Ü ¾Ö´Ï¸ŞÀÌ¼Ç ÀÌº¥Æ®°¡ ¸ğµç°ÍÀ» Ã³¸®ÇÑ´Ù°í °¡Á¤)
-        }
-
-        // === º¸»ó ÇÔ¼ö (´ÙÀ½ ´Ü°è¿¡¼­ »ó¼¼È­) ===
-        // ¿¹½Ã: ¸Å ½ºÅÜ¸¶´Ù ÀÛÀº À½ÀÇ º¸»ó (»ıÁ¸ Àå·Á ¶Ç´Â ºü¸¥ Çàµ¿ À¯µµ)
-        // AddReward(-0.001f);
-    }
-
+    // Heuristic í•¨ìˆ˜: ê³µê²© ì…ë ¥ë§Œ ì˜ˆì „ Input Manager ì‚¬ìš©, ì´ë™ ì…ë ¥ ì¡°ê±´ë¬¸ ìˆ˜ì •!
     public override void Heuristic(in ActionBuffers actionsOut)
     {
-        // °³¹ßÀÚ Å×½ºÆ®¿ë ¼öµ¿ Á¶ÀÛ (±âÁ¸ playerControllerÀÇ ÀÔ·Â ·ÎÁ÷À» ¸ğ¹æ)
+        // Debug.LogWarning("====== [PlayerAgent] Heuristic() CALLED ======"); // ë„ˆë¬´ ìì£¼ ì°íˆë©´ ì£¼ì„ ì²˜ë¦¬
         var continuousActions = actionsOut.ContinuousActions;
         var discreteActions = actionsOut.DiscreteActions;
 
-        // playerControllerÀÇ inputActions¿Í À¯»çÇÏ°Ô °ªÀ» ÀĞ¾î¿É´Ï´Ù. (Input System »ç¿ë ¿¹½Ã)
-        // private ActionManager inputActions; // Initialize¿¡¼­ new ActionManager() ÇÊ¿ä
-        // private Vector2 currentInputWalk;
-        // inputActions.playerAction.Enable(); // OnEnable µî¿¡¼­
-        // currentInputWalk = inputActions.playerAction.walk.ReadValue<Vector2>();
+        // ê¸°ë³¸ê°’ ì´ˆê¸°í™”
+        continuousActions[0] = 0f; // Xì¶• ì´ë™
+        continuousActions[1] = 0f; // Zì¶• ì´ë™
+        discreteActions[0] = 0;   // ê³µê²© (0: ì•ˆí•¨, 1: í•¨)
 
-        // ¿©±â¼­´Â °£´ÜÈ÷ UnityÀÇ ¿¾³¯ Input Manager »ç¿ë ¿¹½Ã·Î ´ëÃ¼ÇÕ´Ï´Ù.
-        // ½ÇÁ¦·Î´Â ÇÁ·ÎÁ§Æ®ÀÇ Input System ¼³Á¤À» µû¸£°Å³ª, »ç¿ëÀÚ°¡ Á¦°øÇÑ playerControllerÀÇ inputActions¸¦ È°¿ëÇØ¾ß ÇÕ´Ï´Ù.
-        continuousActions[0] = Input.GetAxis("Horizontal"); // ÁÂ¿ì ÀÌµ¿ (A, D ¶Ç´Â È­»ìÇ¥ ÁÂ¿ì)
-        continuousActions[1] = Input.GetAxis("Vertical");   // »óÇÏ ÀÌµ¿ (W, S ¶Ç´Â È­»ìÇ¥ À§¾Æ·¡)
+        // ì´ë™ ì…ë ¥ (New Input System) - ìˆ˜ì •ëœ ì¡°ê±´ë¬¸
+        if (inputActions == null)
+        {
+            if (Time.frameCount % 100 == 0)
+                Debug.LogWarning("[PlayerAgent] Heuristic: inputActions (ActionManager) is null. Skipping movement input.", this);
+        }
+        else if (!inputActions.playerAction.Get().enabled) // playerAction ë§µì´ í™œì„±í™”ë˜ì–´ ìˆëŠ”ì§€ í™•ì¸
+        {
+            if (Time.frameCount % 100 == 0)
+                Debug.LogWarning("[PlayerAgent] Heuristic: inputActions.playerAction map is not enabled. Skipping movement input.", this);
+        }
+        else if (inputActions.playerAction.walk == null) // walk ì•¡ì…˜ ìì²´ê°€ nullì¸ì§€ í™•ì¸
+        {
+            Debug.LogError("[PlayerAgent] Heuristic: inputActions.playerAction.walk (InputAction) is null. Check ActionManager setup.", this);
+        }
+        else // ëª¨ë“  ì¡°ê±´ ë§Œì¡± ì‹œ ì´ë™ ì…ë ¥ ì²˜ë¦¬
+        {
+            Vector2 moveInput = inputActions.playerAction.walk.ReadValue<Vector2>();
+            continuousActions[0] = moveInput.x;
+            continuousActions[1] = moveInput.y;
+        }
 
-        discreteActions[0] = Input.GetMouseButtonDown(0) ? 1 : 0; // ¸¶¿ì½º ÁÂÅ¬¸¯À¸·Î °ø°İ
-                                                                  // ¶Ç´Â Space Å° µîÀ¸·Î º¯°æ °¡´É: Input.GetKeyDown(KeyCode.Space) ? 1 : 0;
+        // ê³µê²© ì…ë ¥ (Legacy Input Manager - ë§ˆìš°ìŠ¤ ì™¼ìª½ ë²„íŠ¼)
+        if (Input.GetMouseButton(0) && !agentIsAttack) // ë²„íŠ¼ ëˆ„ë¥´ê³  ìˆê³  & í˜„ì¬ ê³µê²© ì¤‘ì´ ì•„ë‹ ë•Œ
+        {
+            discreteActions[0] = 1; // ê³µê²© ì‹¤í–‰ ì˜ë„ ì „ë‹¬
+        }
+    }
+    
+    public override void OnActionReceived(ActionBuffers actions)
+    {
+        AddReward(penaltyTimeStep); 
+
+        float moveX = actions.ContinuousActions[0];
+        float moveZ = actions.ContinuousActions[1];
+        int attackAction = actions.DiscreteActions[0]; 
+
+         if (tyr != null)
+        {
+            float distanceToTyr = Vector3.Distance(transform.localPosition, tyr.transform.localPosition);
+            // ê±°ë¦¬ê°€ ë©€ìˆ˜ë¡ ë” í° ìŒìˆ˜ ë³´ìƒ(íŒ¨ë„í‹°)ì„ ë°›ë„ë¡ í•©ë‹ˆë‹¤.
+            // estimatedMaxDistanceë¡œ ë‚˜ëˆ„ì–´ ê±°ë¦¬ë¥¼ ì •ê·œí™” í•œ í›„ ë°°ìœ¨ì„ ê³±í•  ìˆ˜ë„ ìˆìŠµë‹ˆë‹¤.
+            // float normalizedDistance = distanceToTyr / estimatedMaxDistance; // estimatedMaxDistanceëŠ” CollectObservationsì—ì„œ ì‚¬ìš©í•œ ê°’
+            // AddReward(normalizedDistance * penaltyDistanceToTyrMultiplier); 
+            // ë˜ëŠ” ë‹¨ìˆœíˆ ê±°ë¦¬ì— ì§ì ‘ ë°°ìœ¨ì„ ê³±í•  ìˆ˜ë„ ìˆìŠµë‹ˆë‹¤ (ë°°ìœ¨ì„ ë§¤ìš° ì‘ê²Œ ìœ ì§€).
+            AddReward(distanceToTyr * penaltyDistanceToTyrMultiplier);
+        }
+
+        if (!agentIsAttack)
+        {
+            if (rb == null) return;
+            Vector3 moveDirection = new Vector3(moveX, 0f, moveZ);
+            rb.velocity = new Vector3(moveDirection.normalized.x * agentMoveSpeed, rb.velocity.y, moveDirection.normalized.z * agentMoveSpeed);
+            if (animator != null)
+            {
+                float currentActualSpeed = new Vector2(rb.velocity.x, rb.velocity.z).magnitude;
+                animator.SetFloat("playerWalkSpeed", currentActualSpeed);
+                if (moveDirection.sqrMagnitude > 0.01f)
+                {
+                    animator.SetFloat("playerDirectionX", moveX);
+                    animator.SetFloat("playerDirectionY", moveZ);
+                }
+            }
+            if (agentHitboxController != null)
+            {
+                if (Mathf.Abs(moveX) > 0.01f)
+                { agentHitboxController.localRotation = Quaternion.Euler(0, (moveX > 0.01f) ? 0f : 180f, 0); }
+                else if (Mathf.Abs(moveZ) > 0.01f)
+                { agentHitboxController.localRotation = Quaternion.Euler(0, -moveZ * 90f, 0); }
+            }
+        }
+
+        if (attackAction == 1 && !agentIsAttack)
+        {
+            
+            if (tyr != null && agentHitboxController != null)
+            {
+                // float distanceToTyr = Vector3.Distance(transform.localPosition, tyr.transform.localPosition);
+                Vector3 directionToTyr = (tyr.transform.localPosition - transform.localPosition).normalized;
+                // float dotProduct = Vector3.Dot(agentHitboxController.forward, directionToTyr); // í”Œë ˆì´ì–´ ì •ë©´ê³¼ Tyr ë°©í–¥ì˜ ë‚´ì 
+
+            }
+            if (animator != null)
+            {
+                AddReward(rewardAttemptAttack);
+                Debug.Log("[PlayerAgent] OnActionReceived: ê³µê²© ì‹¤í–‰!");
+                animator.SetTrigger("playerAttack");
+                agentIsAttack = true;
+            }
+        }
+    }
+
+    private void OnTriggerEnter(Collider other)
+    {
+        if (!isInvincible && other.CompareTag("TyrAttackCollider"))
+        {
+            Debug.Log($"[PlayerAgent] OnTriggerEnter: {other.name} ì™€ ì¶©ëŒ (íƒœê·¸: {other.tag})");
+            PlayerTookDamage(1f);
+            isInvincible = true;
+            StartCoroutine(ResetInvincibility());
+        }
+    }
+
+    IEnumerator ResetInvincibility()
+    {
+        yield return new WaitForSeconds(invincibilityDuration);
+        isInvincible = false;
+    }
+
+    public void PlayerTookDamage(float damageAmount)
+    {
+        playerHP -= damageAmount;
+        AddReward(penaltyPlayerHit);
+        if (playerHP <= 0)
+        {
+            playerHP = 0;
+            Debug.LogWarning("[PlayerAgent] í”Œë ˆì´ì–´ ì‚¬ë§! ì—í”¼ì†Œë“œ ì¢…ë£Œ.");
+            AddReward(penaltyPlayerDeath);
+            EndEpisode();
+        }
+    }
+
+    public void PlayerHitTyr(float damageDealtToTyr)
+    {
+        if (tyr == null) return;
+        AddReward(rewardHitTyr);
+        Debug.Log($"[PlayerAgent] Tyr íƒ€ê²©! ë³´ìƒ: {rewardHitTyr}");
+    }
+
+    public void TyrDefeated()
+    {
+        Debug.LogWarning("[PlayerAgent] Tyr ê²©íŒŒ! ì—í”¼ì†Œë“œ ì„±ê³µ ì¢…ë£Œ!");
+        AddReward(rewardDefeatTyr);
+        EndEpisode();
+    }
+
+    public void Agent_AttackAnimation_HitboxActive()
+    {
+        if (agentAttackHitBox != null) agentAttackHitBox.SetActive(true);
+    }
+
+    public void Agent_AttackAnimation_HitboxInactive()
+    {
+        if (agentAttackHitBox != null) agentAttackHitBox.SetActive(false);
+    }
+
+    public void Agent_AttackAnimation_Finish()
+    {
+        agentIsAttack = false;
     }
 }

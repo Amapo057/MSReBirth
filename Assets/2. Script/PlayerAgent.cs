@@ -28,14 +28,15 @@ public class PlayerAgent : Agent
     private Vector3 initailPlayerPosition;
 
     [Header("Rewards")]
-    public float rewardDefeatTyr = 1.0f;
-    public float penaltyPlayerDeath = -1.0f;
-    public float rewardHitTyr = 0.5f;
-    public float penaltyPlayerHit = -0.2f;
-    public float penaltyTimeStep = -0.001f; // 매 의사결정 스텝마다 받을 시간 패널티
-    public float rewardAttemptAttack = 0.02f; // 공격 시도 시 받는 작은 보상
+    public float rewardDefeatTyr = 5.0f;
+    public float penaltyPlayerDeath = -6.0f;
+    public float rewardHitTyr = 1f;
+    public float penaltyPlayerHit = -0.8f;
+    public float penaltyTimeStep = -0.0005f; // 매 의사결정 스텝마다 받을 시간 패널티
+    public float rewardAttemptAttack = -0.02f; // 공격 시도 패널티
 
-    public float penaltyDistanceToTyrMultiplier = -0.0001f; // Tyr와의 거리에 따른 패널티 배율 (매우 작은 음수 값)
+    public float penaltyDistanceToTyrMultiplier = 0f; // Tyr와의 거리에 따른 패널티 배율 (매우 작은 음수 값)
+    public float rewardForWellAimedAttempt = 0.05f; // 조준 성공
 
     private Rigidbody rb;
     private Animator animator;
@@ -120,8 +121,19 @@ public class PlayerAgent : Agent
     public override void CollectObservations(VectorSensor sensor)
     {
         float arenaHalfWidthX = 7.0f;
-        float arenaHalfDepthZ = 2.5f;
-        float estimatedMaxDistance = 15.0f;
+        float arenaHalfDepthZ = 4f;
+        float estimatedMaxDistance = 17.0f;
+
+        if (tyr != null && agentHitboxController != null)
+        {
+            Vector3 directionToTyr = (tyr.transform.position - transform.position).normalized;
+            float dotProductToTyr = Vector3.Dot(agentHitboxController.forward, directionToTyr);
+            sensor.AddObservation(dotProductToTyr); // Space Size +1 필요
+        }
+        else
+        {
+            sensor.AddObservation(0f); // 또는 -1f (정면이 아님을 의미)
+        }
 
         sensor.AddObservation(transform.localPosition.x / arenaHalfWidthX);
         sensor.AddObservation(transform.localPosition.z / arenaHalfDepthZ);
@@ -241,13 +253,19 @@ public class PlayerAgent : Agent
 
         if (attackAction == 1 && !agentIsAttack)
         {
-            
+            bool aimedWell = false;
             if (tyr != null && agentHitboxController != null)
             {
                 // float distanceToTyr = Vector3.Distance(transform.localPosition, tyr.transform.localPosition);
                 Vector3 directionToTyr = (tyr.transform.localPosition - transform.localPosition).normalized;
                 // float dotProduct = Vector3.Dot(agentHitboxController.forward, directionToTyr); // 플레이어 정면과 Tyr 방향의 내적
-
+                float dotProduct = Vector3.Dot(agentHitboxController.forward, directionToTyr);
+                if (dotProduct >= 0.85f) // 예: 약 30도 이내로 조준 시 (cos(30도) ~ 0.866)
+                {
+                    aimedWell = true;
+                    AddReward(0.03f); // 잘 조준된 공격 시도에 대한 추가 보상 (예시 값)
+                    Debug.Log("[PlayerAgent] 잘 조준된 공격 시도!");
+                }
             }
             if (animator != null)
             {

@@ -10,7 +10,6 @@ public class TyrController : MonoBehaviour
     public GameObject player;
     public TextMeshProUGUI bossHP;
     private Animator anim;
-    private TimeCheck timer;
     public SpriteRenderer body;
     public SpriteRenderer Leg;
     public PlayerAgent playerAgent;
@@ -48,7 +47,6 @@ public class TyrController : MonoBehaviour
         anim = GetComponent<Animator>();
         rb = GetComponent<Rigidbody>();
         targetPosition = player.transform.position;
-        timer = new TimeCheck();
         tyrHP = tyrMaxHP;
 
     }

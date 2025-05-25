@@ -14,30 +14,32 @@ public class PlayerAgent : Agent
 
     [Header("Agent Attack Settings")]
     public GameObject agentAttackHitBox;
-    public Transform agentHitboxController;
+    public Transform agentHitboxController; // 공격 방향의 기준이 되는 Transform
+    public float agentAttackEffectiveRange = 3.0f; // "잘 조준된 공격" 판단 시 사용할 유효 사거리
+    public float attackAngleDotThreshold = 0.85f;  // "잘 조준된 공격" 판단 시 사용할 정면 각도 임계값 (1에 가까울수록 정면)
     private bool agentIsAttack = false;
 
     [Header("Target Boss Reference")]
-    public TyrController tyr; // TyrController 스크립트 컴포넌트 참조
+    public TyrController tyr; // TyrController 스크립트 컴포넌트 참조 (Inspector에서 할당)
 
     [Header("Player Stats")]
-    public float playerMaxHP = 3f;
-    public float playerHP;
+    public float playerMaxHP = 3f; // 플레이어 최대 체력
+    public float playerHP;         // 현재 플레이어 체력
     public float invincibilityDuration = 1f; // 피격 후 무적 시간 (초)
     private bool isInvincible = false;      // 현재 무적 상태인지
-    private Vector3 initailPlayerPosition;
+    private Vector3 initialPlayerPosition;  // 플레이어 초기 위치
 
     [Header("Rewards")]
     public float rewardDefeatTyr = 5.0f;
     public float penaltyPlayerDeath = -6.0f;
-    public float rewardHitTyr = 1f;
+    public float rewardHitTyr = 1.0f;
     public float penaltyPlayerHit = -0.8f;
-    public float penaltyTimeStep = -0.0005f; // 매 의사결정 스텝마다 받을 시간 패널티
-    public float rewardAttemptAttack = -0.02f; // 공격 시도 패널티
+    public float penaltyTimeStep = -0.0005f;
+    public float penaltyForEachAttackAttempt = -0.02f;
+    public float rewardForWellAimedAttempt = 0.05f;
+    public float penaltyDistanceToTyrMultiplier = 0f; // 기본값 0 (사용자가 0으로 설정했었음)
 
-    public float penaltyDistanceToTyrMultiplier = 0f; // Tyr와의 거리에 따른 패널티 배율 (매우 작은 음수 값)
-    public float rewardForWellAimedAttempt = 0.05f; // 조준 성공
-
+    // 내부 컴포넌트 참조
     private Rigidbody rb;
     private Animator animator;
     private ActionManager inputActions;
@@ -57,7 +59,7 @@ public class PlayerAgent : Agent
             return;
         }
 
-        initailPlayerPosition = transform.localPosition;
+        initialPlayerPosition = transform.localPosition;
 
         if (rb == null) Debug.LogError("[PlayerAgent] Awake: Rigidbody 컴포넌트를 찾을 수 없습니다!", this);
         if (animator == null) Debug.LogError("[PlayerAgent] Awake: Animator 컴포넌트를 찾을 수 없습니다!", this);
@@ -69,8 +71,7 @@ public class PlayerAgent : Agent
 
     protected override void OnEnable()
     {
-        base.OnEnable();
-        Debug.Log("[PlayerAgent] OnEnable: 에이전트 활성화 및 입력 시스템 활성화 시도.");
+        base.OnEnable(); // ML-Agents 기본 초기화 로직 실행
         if (inputActions != null)
         {
             try { inputActions.playerAction.Enable(); }
@@ -81,7 +82,7 @@ public class PlayerAgent : Agent
 
     protected override void OnDisable()
     {
-        base.OnDisable();
+        base.OnDisable(); // ML-Agents 기본 정리 로직 실행
         if (inputActions != null)
         {
             try { inputActions.playerAction.Disable(); }
@@ -91,26 +92,24 @@ public class PlayerAgent : Agent
 
     public override void OnEpisodeBegin()
     {
+        Debug.Log("[PlayerAgent] OnEpisodeBegin: 새 에피소드 시작.");
         agentIsAttack = false;
         isInvincible = false;
         playerHP = playerMaxHP;
 
-        transform.localPosition = initailPlayerPosition;
+        transform.localPosition = initialPlayerPosition; // 저장된 초기 위치로 리셋
 
         if (rb != null)
         {
             rb.velocity = Vector3.zero;
             rb.angularVelocity = Vector3.zero;
         }
-        // 플레이어 위치도 초기 위치로 리셋하는 것이 좋습니다 (필요하다면)
-        // transform.localPosition = playerInitialPosition;
 
-
-        // Tyr 상태 초기화 호출
         if (tyr != null)
         {
+            // TyrController의 ResetTyrState가 playerPosition 인자를 받는다면 전달
             tyr.ResetTyrState();
-            Debug.Log("[PlayerAgent] OnEpisodeBegin - tyr.ResetTyrState() CALLED");
+            Debug.Log("[PlayerAgent] OnEpisodeBegin - tyr.ResetTyrState() 호출됨.");
         }
         else
         {
@@ -121,20 +120,10 @@ public class PlayerAgent : Agent
     public override void CollectObservations(VectorSensor sensor)
     {
         float arenaHalfWidthX = 7.0f;
-        float arenaHalfDepthZ = 4f;
+        float arenaHalfDepthZ = 4.0f;
         float estimatedMaxDistance = 17.0f;
 
-        if (tyr != null && agentHitboxController != null)
-        {
-            Vector3 directionToTyr = (tyr.transform.position - transform.position).normalized;
-            float dotProductToTyr = Vector3.Dot(agentHitboxController.forward, directionToTyr);
-            sensor.AddObservation(dotProductToTyr); // Space Size +1 필요
-        }
-        else
-        {
-            sensor.AddObservation(0f); // 또는 -1f (정면이 아님을 의미)
-        }
-
+        // 플레이어 상태 (7개)
         sensor.AddObservation(transform.localPosition.x / arenaHalfWidthX);
         sensor.AddObservation(transform.localPosition.z / arenaHalfDepthZ);
         if (agentHitboxController != null)
@@ -144,13 +133,23 @@ public class PlayerAgent : Agent
         }
         else { sensor.AddObservation(0f); sensor.AddObservation(1f); }
         sensor.AddObservation(agentIsAttack ? 0f : 1f);
-        sensor.AddObservation(playerHP / playerMaxHP);
-        sensor.AddObservation(isInvincible ? 1f : 0f); // 무적 상태 관찰 -> Space Size +1 (현재 총 16)
+        sensor.AddObservation(playerMaxHP > 0 ? playerHP / playerMaxHP : 0f); // playerMaxHP 0 방지
+        sensor.AddObservation(isInvincible ? 1f : 0f);
 
+        // Tyr 조준 정확도 (1개)
+        if (tyr != null && agentHitboxController != null)
+        {
+            Vector3 directionToTyr = (tyr.transform.position - agentHitboxController.position).normalized;
+            float dotProductToTyr = Vector3.Dot(agentHitboxController.forward, directionToTyr);
+            sensor.AddObservation(dotProductToTyr);
+        }
+        else { sensor.AddObservation(0f); }
+
+        // Tyr 상태 (9개)
         if (tyr == null)
         {
             for (int i = 0; i < 9; i++) sensor.AddObservation(0f);
-            if (Time.frameCount % 100 == 0) Debug.LogWarning("[PlayerAgent] CollectObservations: Tyr 참조가 null입니다.", this);
+            // if (Time.frameCount % 100 == 0) Debug.LogWarning(...); // 너무 잦은 로그 방지
             return;
         }
         Vector3 tyrPosition = tyr.transform.localPosition;
@@ -167,71 +166,40 @@ public class PlayerAgent : Agent
         sensor.AddObservation(tyr.isReady ? 1f : 0f);
     }
 
-    // Heuristic 함수: 공격 입력만 예전 Input Manager 사용, 이동 입력 조건문 수정!
     public override void Heuristic(in ActionBuffers actionsOut)
     {
-        // Debug.LogWarning("====== [PlayerAgent] Heuristic() CALLED ======"); // 너무 자주 찍히면 주석 처리
         var continuousActions = actionsOut.ContinuousActions;
         var discreteActions = actionsOut.DiscreteActions;
+        continuousActions[0] = 0f; continuousActions[1] = 0f; discreteActions[0] = 0;
 
-        // 기본값 초기화
-        continuousActions[0] = 0f; // X축 이동
-        continuousActions[1] = 0f; // Z축 이동
-        discreteActions[0] = 0;   // 공격 (0: 안함, 1: 함)
-
-        // 이동 입력 (New Input System) - 수정된 조건문
-        if (inputActions == null)
-        {
-            if (Time.frameCount % 100 == 0)
-                Debug.LogWarning("[PlayerAgent] Heuristic: inputActions (ActionManager) is null. Skipping movement input.", this);
-        }
-        else if (!inputActions.playerAction.Get().enabled) // playerAction 맵이 활성화되어 있는지 확인
-        {
-            if (Time.frameCount % 100 == 0)
-                Debug.LogWarning("[PlayerAgent] Heuristic: inputActions.playerAction map is not enabled. Skipping movement input.", this);
-        }
-        else if (inputActions.playerAction.walk == null) // walk 액션 자체가 null인지 확인
-        {
-            Debug.LogError("[PlayerAgent] Heuristic: inputActions.playerAction.walk (InputAction) is null. Check ActionManager setup.", this);
-        }
-        else // 모든 조건 만족 시 이동 입력 처리
+        if (inputActions != null && inputActions.playerAction.walk != null && inputActions.playerAction.Get().enabled)
         {
             Vector2 moveInput = inputActions.playerAction.walk.ReadValue<Vector2>();
             continuousActions[0] = moveInput.x;
             continuousActions[1] = moveInput.y;
         }
-
-        // 공격 입력 (Legacy Input Manager - 마우스 왼쪽 버튼)
-        if (Input.GetMouseButton(0) && !agentIsAttack) // 버튼 누르고 있고 & 현재 공격 중이 아닐 때
-        {
-            discreteActions[0] = 1; // 공격 실행 의도 전달
-        }
+        if (Input.GetMouseButton(0) && !agentIsAttack) { discreteActions[0] = 1; }
     }
-    
+
     public override void OnActionReceived(ActionBuffers actions)
     {
-        AddReward(penaltyTimeStep); 
+        AddReward(penaltyTimeStep);
+        if (tyr != null && penaltyDistanceToTyrMultiplier != 0f)
+        {
+            float distanceToTyr = Vector3.Distance(transform.localPosition, tyr.transform.localPosition);
+            AddReward(distanceToTyr * penaltyDistanceToTyrMultiplier);
+        }
 
         float moveX = actions.ContinuousActions[0];
         float moveZ = actions.ContinuousActions[1];
-        int attackAction = actions.DiscreteActions[0]; 
-
-         if (tyr != null)
-        {
-            float distanceToTyr = Vector3.Distance(transform.localPosition, tyr.transform.localPosition);
-            // 거리가 멀수록 더 큰 음수 보상(패널티)을 받도록 합니다.
-            // estimatedMaxDistance로 나누어 거리를 정규화 한 후 배율을 곱할 수도 있습니다.
-            // float normalizedDistance = distanceToTyr / estimatedMaxDistance; // estimatedMaxDistance는 CollectObservations에서 사용한 값
-            // AddReward(normalizedDistance * penaltyDistanceToTyrMultiplier); 
-            // 또는 단순히 거리에 직접 배율을 곱할 수도 있습니다 (배율을 매우 작게 유지).
-            AddReward(distanceToTyr * penaltyDistanceToTyrMultiplier);
-        }
+        int attackAction = actions.DiscreteActions[0];
 
         if (!agentIsAttack)
         {
             if (rb == null) return;
             Vector3 moveDirection = new Vector3(moveX, 0f, moveZ);
             rb.velocity = new Vector3(moveDirection.normalized.x * agentMoveSpeed, rb.velocity.y, moveDirection.normalized.z * agentMoveSpeed);
+
             if (animator != null)
             {
                 float currentActualSpeed = new Vector2(rb.velocity.x, rb.velocity.z).magnitude;
@@ -253,27 +221,30 @@ public class PlayerAgent : Agent
 
         if (attackAction == 1 && !agentIsAttack)
         {
+            AddReward(penaltyForEachAttackAttempt);
             bool aimedWell = false;
             if (tyr != null && agentHitboxController != null)
             {
-                // float distanceToTyr = Vector3.Distance(transform.localPosition, tyr.transform.localPosition);
-                Vector3 directionToTyr = (tyr.transform.localPosition - transform.localPosition).normalized;
-                // float dotProduct = Vector3.Dot(agentHitboxController.forward, directionToTyr); // 플레이어 정면과 Tyr 방향의 내적
+                Vector3 attackOrigin = agentHitboxController.position;
+                Vector3 directionToTyr = (tyr.transform.position - attackOrigin).normalized;
                 float dotProduct = Vector3.Dot(agentHitboxController.forward, directionToTyr);
-                if (dotProduct >= 0.85f) // 예: 약 30도 이내로 조준 시 (cos(30도) ~ 0.866)
+                float distanceToTyrActual = Vector3.Distance(attackOrigin, tyr.transform.position);
+
+                if (distanceToTyrActual <= agentAttackEffectiveRange && dotProduct >= attackAngleDotThreshold)
                 {
                     aimedWell = true;
-                    AddReward(0.03f); // 잘 조준된 공격 시도에 대한 추가 보상 (예시 값)
-                    Debug.Log("[PlayerAgent] 잘 조준된 공격 시도!");
+                    AddReward(rewardForWellAimedAttempt);
                 }
             }
+
             if (animator != null)
             {
-                AddReward(rewardAttemptAttack);
-                Debug.Log("[PlayerAgent] OnActionReceived: 공격 실행!");
                 animator.SetTrigger("playerAttack");
                 agentIsAttack = true;
+                if (aimedWell) { Debug.Log("[PlayerAgent] OnActionReceived: 잘 조준된 공격 실행!"); }
+                else { Debug.LogWarning("[PlayerAgent] OnActionReceived: 조준이 좋지 않은 공격 실행!"); }
             }
+            else { Debug.LogWarning("[PlayerAgent] OnActionReceived: Animator가 null이어서 공격 애니메이션을 실행할 수 없습니다.", this); }
         }
     }
 
@@ -281,8 +252,8 @@ public class PlayerAgent : Agent
     {
         if (!isInvincible && other.CompareTag("TyrAttackCollider"))
         {
-            Debug.Log($"[PlayerAgent] OnTriggerEnter: {other.name} 와 충돌 (태그: {other.tag})");
-            PlayerTookDamage(1f);
+            float damageReceived = 1f; // Tyr의 공격에 의한 기본 피해량
+            PlayerTookDamage(damageReceived);
             isInvincible = true;
             StartCoroutine(ResetInvincibility());
         }
@@ -298,25 +269,26 @@ public class PlayerAgent : Agent
     {
         playerHP -= damageAmount;
         AddReward(penaltyPlayerHit);
+        Debug.Log($"[PlayerAgent] 플레이어 피격! 현재 체력: {playerHP.ToString("F2")}/{playerMaxHP}, 받은 피해: {damageAmount}, 보상: {penaltyPlayerHit}");
         if (playerHP <= 0)
         {
             playerHP = 0;
-            Debug.LogWarning("[PlayerAgent] 플레이어 사망! 에피소드 종료.");
+            Debug.LogWarning($"[PlayerAgent] <<< PLAYER DIED >>> 체력 {playerHP.ToString("F2")}. 에피소드 종료 실행.", this);
             AddReward(penaltyPlayerDeath);
             EndEpisode();
         }
     }
 
-    public void PlayerHitTyr(float damageDealtToTyr)
+    public void PlayerHitTyr(float damageDealtToTyr) // TyrController에서 호출
     {
         if (tyr == null) return;
-        AddReward(rewardHitTyr);
+        AddReward(rewardHitTyr); // damageDealtToTyr 값을 보상에 반영하려면 로직 수정 필요
         Debug.Log($"[PlayerAgent] Tyr 타격! 보상: {rewardHitTyr}");
     }
 
-    public void TyrDefeated()
+    public void TyrDefeated() // TyrController에서 호출
     {
-        Debug.LogWarning("[PlayerAgent] Tyr 격파! 에피소드 성공 종료!");
+        Debug.LogWarning("[PlayerAgent] <<< TYR DEFEATED >>> 에피소드 성공 종료 실행.", this);
         AddReward(rewardDefeatTyr);
         EndEpisode();
     }
@@ -324,15 +296,18 @@ public class PlayerAgent : Agent
     public void Agent_AttackAnimation_HitboxActive()
     {
         if (agentAttackHitBox != null) agentAttackHitBox.SetActive(true);
+        // Debug.Log("[PlayerAgent] AnimationEvent: Hitbox 활성화."); // 필요시 주석 해제
     }
 
     public void Agent_AttackAnimation_HitboxInactive()
     {
         if (agentAttackHitBox != null) agentAttackHitBox.SetActive(false);
+        // Debug.Log("[PlayerAgent] AnimationEvent: Hitbox 비활성화."); // 필요시 주석 해제
     }
 
     public void Agent_AttackAnimation_Finish()
     {
         agentIsAttack = false;
+        // Debug.Log("[PlayerAgent] AnimationEvent: 공격 애니메이션 종료, agentIsAttack = false."); // 필요시 주석 해제
     }
 }

@@ -714,7 +714,7 @@ Transform:
   m_GameObject: {fileID: 561585669}
   serializedVersion: 2
   m_LocalRotation: {x: 0.20908763, y: -0.000000014413364, z: 0.0000000030817566, w: 0.9778969}
-  m_LocalPosition: {x: 0.11514951, y: 7.367317, z: -14.382307}
+  m_LocalPosition: {x: 0.11514956, y: 7.367317, z: -14.382307}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -2311,7 +2311,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   m_BrainParameters:
-    VectorObservationSize: 16
+    VectorObservationSize: 17
     NumStackedVectorObservations: 1
     m_ActionSpec:
       m_NumContinuousActions: 2
@@ -2320,9 +2320,9 @@ MonoBehaviour:
     VectorActionDescriptions: []
     VectorActionSpaceType: 0
     hasUpgradedBrainParametersWithActionSpec: 1
-  m_Model: {fileID: 0}
+  m_Model: {fileID: 5022602860645237092, guid: 159ada5498c7a3c49a2c7168fdcd313d, type: 3}
   m_InferenceDevice: 0
-  m_BehaviorType: 0
+  m_BehaviorType: 2
   m_BehaviorName: PlayerBehavior
   TeamId: 0
   m_UseChildSensors: 1
@@ -2347,16 +2347,19 @@ MonoBehaviour:
   agentMoveSpeed: 2
   agentAttackHitBox: {fileID: 1610661274}
   agentHitboxController: {fileID: 1134740365}
+  agentAttackEffectiveRange: 3
+  attackAngleDotThreshold: 0.85
   tyr: {fileID: 996135641}
   playerMaxHP: 5
   playerHP: 0
   invincibilityDuration: 1
-  rewardDefeatTyr: 5
-  penaltyPlayerDeath: -6
-  rewardHitTyr: 0.7
-  penaltyPlayerHit: -0.6
-  penaltyTimeStep: -0.005
-  rewardAttemptAttack: -0.01
+  rewardDefeatTyr: 10
+  penaltyPlayerDeath: -10
+  rewardHitTyr: 1
+  penaltyPlayerHit: -0.5
+  penaltyTimeStep: 0
+  penaltyForEachAttackAttempt: 0
+  rewardForWellAimedAttempt: 0
   penaltyDistanceToTyrMultiplier: 0
 --- !u!1 &1859953687
 GameObject:

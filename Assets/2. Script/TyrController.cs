@@ -31,7 +31,7 @@ public class TyrController : MonoBehaviour
     public float tyrMaxHP = 10f;
     public float tyrHP;
     private int stuck = 0;
-    public float Force = 10f;
+    public float Force = 100f;
     public bool canMove = true; // Tyr가 움직일 수 있는지 여부
     private float maxXPosition = 7f;
     private float maxZPosition = 5f;
@@ -261,7 +261,8 @@ public class TyrController : MonoBehaviour
     }
     public void TackleMove()
     {
-        rb.AddForce(Vector3.down.normalized * Force, ForceMode.Impulse);
+        //rb.AddForce(Vector3.down.normalized * Force, ForceMode.Impulse);
+        return;
     }
 }
 public class TimeCheck

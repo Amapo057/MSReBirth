@@ -10,6 +10,7 @@ behaviors:
 # 작동
 # conda activate py38_mlagents
 # mlagents-learn C:\project\MSRebirth\Assets\ML\playerData.yaml --run-id=ML
+# mlagents-learn C:\project\MSRebirth\Assets\ML\playerData.yaml --run-id=ML_0525_1 --initialize-from=ML_0524_14
 # --initialize-from=ML
 # --resume
 # tensorboard --logdir results

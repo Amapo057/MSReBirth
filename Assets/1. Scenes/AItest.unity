@@ -899,7 +899,7 @@ Transform:
   m_GameObject: {fileID: 561585669}
   serializedVersion: 2
   m_LocalRotation: {x: 0.20908763, y: -0.000000014413364, z: 0.0000000030817566, w: 0.9778969}
-  m_LocalPosition: {x: 0.11514964, y: 7.367317, z: -14.382307}
+  m_LocalPosition: {x: 0.11514938, y: 7.367317, z: -14.382307}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -1524,7 +1524,7 @@ MonoBehaviour:
   speed: 1
   isWalk: 1
   isAttack: 0
-  tyrMaxHP: 20
+  tyrMaxHP: 10
   tyrHP: 0
   Force: 10
   canMove: 1
@@ -1537,7 +1537,7 @@ Rigidbody:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 996135637}
   serializedVersion: 4
-  m_Mass: 10
+  m_Mass: 15
   m_Drag: 1
   m_AngularDrag: 0.05
   m_CenterOfMass: {x: 0, y: 0, z: 0}
@@ -2956,19 +2956,20 @@ MonoBehaviour:
   agentAttackEffectiveRange: 3
   attackAngleDotThreshold: 0.85
   tyr: {fileID: 996135641}
-  playerMaxHP: 3
+  playerMaxHP: 5
   playerHP: 0
   invincibilityDuration: 1
   rewardDefeatTyr: 5
   penaltyPlayerDeath: -3
-  rewardHitTyr: 0.5
-  penaltyPlayerHit: -1.2
-  penaltyTimeStep: 0
+  rewardHitTyr: 0.6
+  penaltyPlayerHit: -0.5
+  penaltyTimeStep: -0.01
   penaltyForEachAttackAttempt: -0.1
-  rewardForWellAimedAttempt: 0
-  penaltyDistanceToTyrMultiplier: 0
-  rewardDodge: 0.4
+  rewardForWellAimedAttempt: 0.2
+  penaltyDistanceToTyrMultiplier: -0.01
+  rewardDodge: 0.5
   penaltyDodge: -0.1
+  rewardWalk: 0.05
 --- !u!114 &1686109911
 MonoBehaviour:
   m_ObjectHideFlags: 0

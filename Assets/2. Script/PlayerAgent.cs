@@ -46,6 +46,7 @@ public class PlayerAgent : Agent
     public float penaltyDistanceToTyrMultiplier = 0f; // 기본값 0 (사용자가 0으로 설정했었음)
     public float rewardDodge = 0.05f;
     public float penaltyDodge = -0.1f;
+    public float rewardWalk = 0.05f;
 
     // 내부 컴포넌트 참조
     private Rigidbody rb;
@@ -174,42 +175,152 @@ public class PlayerAgent : Agent
 
     public override void Heuristic(in ActionBuffers actionsOut)
     {
-        var continuousActions = actionsOut.ContinuousActions;
-        var discreteActions = actionsOut.DiscreteActions;
-        continuousActions[0] = 0f; continuousActions[1] = 0f; discreteActions[0] = 0;
+        // var continuousActions = actionsOut.ContinuousActions;
+        // var discreteActions = actionsOut.DiscreteActions;
+        // continuousActions[0] = 0f; continuousActions[1] = 0f; discreteActions[0] = 0;
 
-        if (!isDodge)
+        // if (!isDodge)
+        // {
+
+        //     if (inputActions != null && inputActions.playerAction.walk != null && inputActions.playerAction.Get().enabled)
+        //     {
+        //         Vector2 moveInput = inputActions.playerAction.walk.ReadValue<Vector2>();
+        //         continuousActions[0] = moveInput.x;
+        //         continuousActions[1] = moveInput.y;
+        //         playerDirection = new Vector3(continuousActions[0], 0f, continuousActions[1]);
+        //     }
+        //     if (Input.GetMouseButton(0) && !agentIsAttack) { discreteActions[0] = 1; }
+
+        //     if (Input.GetKey(KeyCode.Space))
+        //     {
+        //         PlayerDodge();
+        //     }
+        // }
+        // else
+        // {
+        //     dodgeAcceleration += 1;
+        //     rb.AddForce(playerDirection.normalized * 500 / (dodgeAcceleration / 2), ForceMode.Force);
+        // }
+        float moveX = 0f;
+        float moveZ = 0f;
+        if (Input.GetKey(KeyCode.A)){moveX = -1f;}
+        else if(Input.GetKey(KeyCode.D)){ moveX = 1f; }
+        if (Input.GetKey(KeyCode.W)){ moveZ = 1f; }
+        else if (Input.GetKey(KeyCode.S)){ moveZ = -1f; }
+
+        // 1. 현재 '회피 중'(`isDodge == true`)일 때의 물리 처리 (닥터의 고유 로직)
+        if (isDodge)
         {
-
-            if (inputActions != null && inputActions.playerAction.walk != null && inputActions.playerAction.Get().enabled)
+            // 닥터의 회피 중 물리 로직 (예: dodgeAcceleration을 사용한 움직임)
+            // 이 블록의 코드는 닥터께서 직접 작성/관리하시는 부분입니다.
+            // 예시 (닥터의 이전 코드 조각 기반):
+            dodgeAcceleration *= 0.8f;
+            if (rb != null && playerDirection != Vector3.zero)
             {
-                Vector2 moveInput = inputActions.playerAction.walk.ReadValue<Vector2>();
-                continuousActions[0] = moveInput.x;
-                continuousActions[1] = moveInput.y;
-                playerDirection = new Vector3(continuousActions[0], 0f, continuousActions[1]);
+                rb.velocity = new Vector3(playerDirection.x * dodgeAcceleration, 0f, playerDirection.z * dodgeAcceleration);
             }
-            if (Input.GetMouseButton(0) && !agentIsAttack) { discreteActions[0] = 1; }
-
-            if (Input.GetKey(KeyCode.Space))
+            if (dodgeAcceleration < 0.1f && isDodge) // isDodge를 한번 더 체크하여 중복 호출 방지
             {
-                PlayerDodge();
+                PlayerDodgeEnd(); // 애니메이션 이벤트 외의 강제 종료 조건 (선택 사항)
+            }
+            return; // 회피 중에는 다른 행동 명령 처리 안 함
+        }
+
+        // (이제 isDodge가 false인 상황)
+
+        // 2. 새로운 '회피 명령' 처리 (`dodgeDiscreteAction == 1`)
+        //    (공격 중이 아닐 때만 새로운 회피 가능)
+        if (Input.GetKey(KeyCode.Space) && !agentIsAttack)
+        {
+            // 회피 방향 결정 ("마지막 입력의 벡터 받아서 사용" 또는 현재 이동 입력)
+            Vector3 currentMoveIntent = new Vector3(moveX, 0f, moveZ);
+            if (currentMoveIntent.sqrMagnitude > 0.01f)
+            {
+                playerDirection = currentMoveIntent.normalized;
+            }
+            else if (agentHitboxController != null)
+            {
+                playerDirection = agentHitboxController.forward;
+            }
+            else
+            {
+                playerDirection = transform.forward;
+            }
+            
+            PlayerDodge(); // 닥터의 PlayerDodge() 함수 호출
+            return; 
+        }
+
+        // 3. 새로운 '공격 명령' 처리 (`attackDiscreteAction == 1`)
+        //    (회피 명령이 없었고, 회피 중도 아니고, 이미 공격 중도 아닐 때)
+        if (Input.GetKey(KeyCode.Mouse0) && !agentIsAttack) 
+        {
+            AddReward(penaltyForEachAttackAttempt);
+            bool aimedWell = false;
+            if (tyr != null && agentHitboxController != null)
+            {
+                Vector3 attackOrigin = agentHitboxController.position;
+                Vector3 directionToTyr = (tyr.transform.position - attackOrigin).normalized;
+                float dotProduct = Vector3.Dot(agentHitboxController.forward, directionToTyr);
+                float distanceToTyrActual = Vector3.Distance(attackOrigin, tyr.transform.position);
+
+                if (distanceToTyrActual <= agentAttackEffectiveRange && dotProduct >= attackAngleDotThreshold)
+                {
+                    aimedWell = true;
+                    AddReward(rewardForWellAimedAttempt);
+                }
+            }
+
+            if (animator != null)
+            {
+                animator.SetTrigger("playerAttack");
+                agentIsAttack = true;
+                if (aimedWell) { Debug.Log("[PlayerAgent] OnActionReceived: 잘 조준된 공격 실행!"); }
+                else { Debug.LogWarning("[PlayerAgent] OnActionReceived: 조준이 좋지 않은 공격 실행!"); }
+            }
+            else { Debug.LogWarning("[PlayerAgent] OnActionReceived: Animator가 null이어서 공격 애니메이션을 실행할 수 없습니다.", this); }
+            return; 
+        }
+        
+        if (rb == null) return;
+        Vector3 moveDirectionInput = new Vector3(moveX, 0f, moveZ);
+        rb.velocity = new Vector3(moveDirectionInput.normalized.x * 5, rb.velocity.y, moveDirectionInput.normalized.z * 5);
+        
+        // 일반 이동 시에도 playerDirection 업데이트 (다음 회피 시 "마지막 이동 입력 벡터"로 사용하기 위해)
+        if (moveDirectionInput.sqrMagnitude > 0.01f)
+        {
+        playerDirection = moveDirectionInput.normalized; 
+        }
+
+        if (animator != null)
+        {
+            float currentActualSpeed = new Vector2(rb.velocity.x, rb.velocity.z).magnitude;
+            animator.SetFloat("playerWalkSpeed", currentActualSpeed);
+            if (moveDirectionInput.sqrMagnitude > 0.01f)
+            {
+                AddReward(rewardWalk);
+                animator.SetFloat("playerDirectionX", moveX);
+                animator.SetFloat("playerDirectionY", moveZ);
             }
         }
-        else
+        if (agentHitboxController != null)
         {
-            dodgeAcceleration += 1;
-            rb.AddForce(playerDirection.normalized * 500 / (dodgeAcceleration / 2), ForceMode.Force);
+            if (Mathf.Abs(moveX) > 0.01f)
+            { agentHitboxController.localRotation = Quaternion.Euler(0, (moveX > 0.01f) ? 0f : 180f, 0); }
+            else if (Mathf.Abs(moveZ) > 0.01f)
+            { agentHitboxController.localRotation = Quaternion.Euler(0, -moveZ * 90f, 0); }
         }
+        
     }
 
     public override void OnActionReceived(ActionBuffers actions)
     {
         AddReward(penaltyTimeStep);
-        // if (tyr != null && penaltyDistanceToTyrMultiplier != 0f) // 거리 패널티는 현재 0으로 설정하신 상태
-        // {
-        //     float distanceToTyr = Vector3.Distance(transform.localPosition, tyr.transform.localPosition);
-        //     AddReward(distanceToTyr * penaltyDistanceToTyrMultiplier);
-        // }
+        if (tyr != null && penaltyDistanceToTyrMultiplier != 0f) // 거리 패널티는 현재 0으로 설정하신 상태
+        {
+            float distanceToTyr = Vector3.Distance(transform.localPosition, tyr.transform.localPosition);
+            AddReward(distanceToTyr * penaltyDistanceToTyrMultiplier);
+        }
 
         float moveX = actions.ContinuousActions[0];
         float moveZ = actions.ContinuousActions[1];
@@ -303,13 +414,16 @@ public class PlayerAgent : Agent
         
         if (rb == null) return;
         Vector3 moveDirectionInput = new Vector3(moveX, 0f, moveZ);
-        rb.velocity = new Vector3(moveDirectionInput.normalized.x * agentMoveSpeed, rb.velocity.y, moveDirectionInput.normalized.z * agentMoveSpeed);
+        if (!agentIsAttack)
+        {
+            rb.velocity = new Vector3(moveDirectionInput.normalized.x * agentMoveSpeed, rb.velocity.y, moveDirectionInput.normalized.z * agentMoveSpeed);
+        }
         
         // 일반 이동 시에도 playerDirection 업데이트 (다음 회피 시 "마지막 이동 입력 벡터"로 사용하기 위해)
-        if (moveDirectionInput.sqrMagnitude > 0.01f)
-        {
-        playerDirection = moveDirectionInput.normalized; 
-        }
+            if (moveDirectionInput.sqrMagnitude > 0.01f)
+            {
+                playerDirection = moveDirectionInput.normalized;
+            }
 
         if (animator != null)
         {
@@ -317,6 +431,7 @@ public class PlayerAgent : Agent
             animator.SetFloat("playerWalkSpeed", currentActualSpeed);
             if (moveDirectionInput.sqrMagnitude > 0.01f)
             {
+                AddReward(rewardWalk);
                 animator.SetFloat("playerDirectionX", moveX);
                 animator.SetFloat("playerDirectionY", moveZ);
             }

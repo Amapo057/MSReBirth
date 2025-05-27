@@ -4,6 +4,7 @@ using Unity.VisualScripting;
 using UnityEngine;
 using TMPro;
 using JetBrains.Annotations;
+using System.Collections;
 
 public class TyrController : MonoBehaviour
 {
@@ -35,6 +36,7 @@ public class TyrController : MonoBehaviour
     public bool canMove = true; // Tyr가 움직일 수 있는지 여부
     private float maxXPosition = 7f;
     private float maxZPosition = 5f;
+    private bool isInvincible = false;
 
 
     // 학습용 변수
@@ -80,9 +82,11 @@ public class TyrController : MonoBehaviour
 
     void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("PlayerAttackCollider"))
+        if (other.CompareTag("PlayerAttackCollider") && !isInvincible)
         {
             tyrHP -= 1;
+            isInvincible = true;
+            StartCoroutine(ResetInvincibility());
             playerAgent.PlayerHitTyr(-1);
         }
         if (tyrHP <= 0)
@@ -101,6 +105,11 @@ public class TyrController : MonoBehaviour
             }
             // gameObject.SetActive(false); // 예: Tyr 비활성화
         }
+    }
+    IEnumerator ResetInvincibility()
+    {
+        yield return new WaitForSeconds(1f);
+        isInvincible = false;
     }
 
     // Update is called once per frame
@@ -216,10 +225,8 @@ public class TyrController : MonoBehaviour
                 if (playerDistance <= 1.5f || walkNumber >= 1)
                 {
                     isAttack = true;  // 공격 상태로 전환
-                    isReady = true;   // 공격 준비 상태로 전환 (애니메이션 이벤트에서 ReadyEnd() 호출 필요)
                     isWalk = false;   // 걷기 중단
                     walkNumber = 0;   // 다음 교전을 위해 이동 횟수 초기화
-                    Debug.Log("[TyrController] 공격 결정! isAttack=true, isReady=true");
                 }
                 else // 목표 지점에는 도달했지만, 플레이어가 아직 멀고, 첫 번째 이동이었다면
                 {
@@ -227,7 +234,6 @@ public class TyrController : MonoBehaviour
                     if (player != null) targetPosition = player.transform.position; // 현재 플레이어 위치로 타겟 업데이트
                     isWalk = true;    // 다시 걷기 상태로
                                       // timer.ResetTime(); // TimeCheck 클래스의 timer 사용 시 (현재 코드에는 직접적인 사용처 안 보임)
-                    Debug.Log($"[TyrController] 중간 목표 도달. 플레이어 재타겟팅. WalkNumber: {walkNumber}");
                 }
             }
             // 목표 지점에 아직 도달하지 못했다면, 계속 이동 (isWalk가 true일 경우)
@@ -248,7 +254,7 @@ public class TyrController : MonoBehaviour
 
     public void ReadyEnd()
     {
-        isReady = false;
+        isReady = true;
     }
 
     public void AttackEnd()
@@ -258,6 +264,7 @@ public class TyrController : MonoBehaviour
         walkNumber = 0;
         isAttack = false;
         stuck = 0;
+        isReady = false;
     }
     public void TackleMove()
     {

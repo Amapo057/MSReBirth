@@ -5,9 +5,10 @@ using UnityEngine;
 using TMPro;
 using JetBrains.Annotations;
 
-public class TyrController : MonoBehaviour
+public class TyrBackup : MonoBehaviour
 {
     public GameObject player;
+    public TextMeshProUGUI bossHP;
     private Animator anim;
     public SpriteRenderer body;
     public SpriteRenderer Leg;
@@ -35,9 +36,7 @@ public class TyrController : MonoBehaviour
     private float maxXPosition = 7f;
     private float maxZPosition = 5f;
     private bool isInvincible = false;
-    private bool attackMotion = false;
-    private int attackNumner = 0;
-    public float attackSpeed = 3f;
+
 
     // 학습용 변수
     public bool isReady = false;
@@ -87,7 +86,7 @@ public class TyrController : MonoBehaviour
             tyrHP -= 1;
             isInvincible = true;
             StartCoroutine(ResetInvincibility());
-            // playerAgent.PlayerHitTyr(-1);
+            playerAgent.PlayerHitTyr(-1);
         }
         if (tyrHP <= 0)
         {
@@ -108,7 +107,7 @@ public class TyrController : MonoBehaviour
     }
     IEnumerator ResetInvincibility()
     {
-        yield return new WaitForSeconds(0.7f);
+        yield return new WaitForSeconds(1f);
         isInvincible = false;
     }
 
@@ -116,9 +115,15 @@ public class TyrController : MonoBehaviour
     void Update()
     {
         anim.SetBool("tyrWalk", isWalk);
+        bossHP.SetText("boss hp : {0}", tyrHP);
     }
     void FixedUpdate()
     {
+        if (player == null) // 플레이어 참조가 없으면 아무것도 하지 않음
+        {
+            if (Time.frameCount % 100 == 0) Debug.LogWarning("[TyrController] Player 참조가 없습니다.");
+            return;
+        }
 
         // --- 플레이어 방향으로 스프라이트 뒤집기 (공격 중이 아닐 때) ---
         if (!isAttack && body != null && Leg != null) // body와 Leg SpriteRenderer가 할당되어 있다고 가정
@@ -147,47 +152,43 @@ public class TyrController : MonoBehaviour
         // --- 주 로직: 공격 중이거나, 이동/결정 중 ---
         if (isAttack)
         {
-            isWalk = false; // 공격 중에는 걷지 않음 (애니메이터 업데이트를 위해)            
+            // === 공격 실행 단계 ===
+            isWalk = false; // 공격 중에는 걷지 않음 (애니메이터 업데이트를 위해)
 
-            if (attackMotion)
+            // 플레이어의 위치를 Tyr의 로컬 좌표계로 변환 (Tyr 기준 앞/뒤/좌/우 판단)
+            Vector3 playerLocalPosition = transform.InverseTransformPoint(player.transform.position);
+            float localPlayerX = playerLocalPosition.x;
+            float localPlayerZ = playerLocalPosition.z;
+
+            // 여기서 Debug.Log를 통해 localPlayerX, localPlayerZ 값을 확인하며 공격 트리거 조건을 조정하세요.
+            // Debug.Log($"[TyrController] Attack Phase - Player Local Pos: X={localPlayerX.ToString("F2")}, Z={localPlayerZ.ToString("F2")}");
+
+            // 로컬 좌표를 기준으로 공격 애니메이션 결정
+            // (이 예시는 각 분면마다 다른 공격을 한다고 가정합니다. 실제 공격 패턴에 맞게 수정 필요)
+            if (Mathf.Abs(localPlayerX) > Mathf.Abs(localPlayerZ)) // 플레이어가 Tyr의 좌우 측면에 더 가까울 때
             {
-                // 플레이어의 위치를 Tyr의 로컬 좌표계로 변환
-                Vector3 playerLocalPosition = transform.InverseTransformPoint(player.transform.position);
-                float localPlayerX = playerLocalPosition.x;
-                float localPlayerZ = playerLocalPosition.z;
-
-                if (Mathf.Abs(localPlayerX) > Mathf.Abs(localPlayerZ)) // 플레이어가 Tyr의 좌우 측면에 더 가까울 때
+                if (localPlayerX > 0) // 플레이어가 Tyr의 로컬 오른쪽 (+X)
                 {
-                    if (localPlayerX < 0) // 플레이어가 Tyr의 로컬 오른쪽 (+X)
-                    {
-                        anim.SetTrigger("tyrSideTail");
-                        attackNumner = 1;
-                    }
-                    else // 플레이어가 Tyr의 로컬 왼쪽 (-X)
-                    {
-                        anim.SetTrigger("tyrBite");
-                        attackNumner = 2;
-                    }
+                    anim.SetTrigger("tyrSideTail"); // 예: 오른쪽 측면 공격
                 }
-                else // 플레이어가 Tyr의 앞 또는 뒤에 더 가까울 때
+                else // 플레이어가 Tyr의 로컬 왼쪽 (-X)
                 {
-                    if (localPlayerZ > 0) // 플레이어가 Tyr의 로컬 앞쪽 (+Z)
-                    {
-                        anim.SetTrigger("tyrSideTail");
-                        attackNumner = 1;
-                    }
-                    else // 플레이어가 Tyr의 로컬 뒤쪽 (-Z)
-                    {
-                        // 뒤쪽 공격 애니메이션이 있다면 설정, 없다면 다른 적절한 공격
-                        anim.SetTrigger("tyrTackle");
-                        attackNumner = 3;
-                    }
+                    anim.SetTrigger("tyrBite");     // 예: 왼쪽 측면 공격
                 }
-                Debug.Log("Attack");
-                attackMotion = false;
             }
-            AttackMove();
-            
+            else // 플레이어가 Tyr의 앞 또는 뒤에 더 가까울 때
+            {
+                if (localPlayerZ > 0) // 플레이어가 Tyr의 로컬 앞쪽 (+Z)
+                {
+                    anim.SetTrigger("tyrSideTail");   // 예: 정면 공격
+                }
+                else // 플레이어가 Tyr의 로컬 뒤쪽 (-Z)
+                {
+                    // 뒤쪽 공격 애니메이션이 있다면 설정, 없다면 다른 적절한 공격
+                    anim.SetTrigger("tyrTackle"); // 예: 뒤쪽 공격 (또는 다른 공격)
+                }
+            }
+            // isAttack 상태는 애니메이션 이벤트에서 AttackEnd()가 호출되어 false로 변경됩니다.
         }
         else // isAttack이 false일 때 (이동 또는 공격 결정 단계)
         {
@@ -223,7 +224,6 @@ public class TyrController : MonoBehaviour
                 if (playerDistance <= 1.5f || walkNumber >= 1)
                 {
                     isAttack = true;  // 공격 상태로 전환
-                    attackMotion = true;
                     isWalk = false;   // 걷기 중단
                     walkNumber = 0;   // 다음 교전을 위해 이동 횟수 초기화
                 }
@@ -265,21 +265,9 @@ public class TyrController : MonoBehaviour
         stuck = 0;
         isReady = false;
     }
-    public void AttackMove()
+    public void TackleMove()
     {
-        switch (attackNumner)
-        {
-            case 1:
-                rb.velocity = new Vector3(0f, 0f, 1f*attackSpeed);
-                break;
-            case 2:
-                rb.velocity = new Vector3(1f * attackSpeed, 0f, 0f);
-                break;
-            case 3:
-                rb.velocity = new Vector3(0f, 0f, -1f * attackSpeed);
-                break;
-        }
-        
+        //rb.AddForce(Vector3.down.normalized * Force, ForceMode.Impulse);
+        return;
     }
 }
-

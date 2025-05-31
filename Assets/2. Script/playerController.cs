@@ -1,153 +1,168 @@
+using Google.Protobuf.WellKnownTypes;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
-using UnityEngine.InputSystem;
 
-public class playerController : MonoBehaviour
+public class PlayerController : MonoBehaviour
 {
-    private ActionManager inputActions;
-    private Rigidbody rb;
-    private Animator animator;
-    private Vector2 inputWalk;
-    private Vector2 playerDirection;
-
-    public GameObject attackHitBox;
-    public Transform hitboxController;
-
+    // �÷��̾� �۵� ����
     public float moveSpeed = 2f;
-    public bool isAttack = false;
-    void Awake()
-    {
-        // inputActions 불러오기
-        inputActions = new ActionManager();
-    }
-    void OnEnable()
-    {
-        // inputActions 활성화
-        inputActions.playerAction.Enable();
+    private Vector3 moveDirection = new Vector3(1f, 0f, 0f);
+    public float playerHp = 10;
 
-        inputActions.playerAction.attack.performed += OnAttack;
-    }
-    void Start()
+    private bool isDodge = false;
+    public float dodgeAcceleration = 10f;
+    private bool invincible = false;
+
+    private bool isAttack = false;
+    private float chargeTime = 0f;
+    private float attackDamage = 1f;
+
+    // �÷��̾� ���� ������Ʈ
+    public Animator playerSprite;
+    public GameObject playerHitbox;
+    public GameObject tyr;
+
+    // �÷��̾� ������Ʈ
+    private Rigidbody rb;
+
+    private void Start()
     {
-        // 프레임 고정
-        Application.targetFrameRate = 60;
-        // Rigidbody와 Animator 컴포넌트 가져오기
         rb = GetComponent<Rigidbody>();
-        animator = GetComponent<Animator>();
-
-        
-    }
-    void OnDisable()
-    {
-        // inputActions 비활성화
-        inputActions.playerAction.Disable();
-
-        inputActions.playerAction.attack.performed -= OnAttack;
+        Application.targetFrameRate = 60;
     }
 
-    // Update is called once per frame
-    void Update()
+    private void Update()
     {
-        // inputWalk에 inputAction으로 받은 입력값 저장
-        inputWalk = inputActions.playerAction.walk.ReadValue<Vector2>();
 
-        //히트박스 방향 전환
-        Vector3 currentScale = transform.localScale;
+    }
 
-        // magnitude로 벡터값 확인
-        float inputMagnitude = inputWalk.magnitude;
-        animator.SetFloat("playerWalkSpeed", inputMagnitude);
-        
-        if (!isAttack)
+    private void FixedUpdate()
+    {
+        float moveX = 0;
+        float moveZ = 0;
+        // Ű �Է�
+        if (Input.GetKey(KeyCode.A)) { moveX = -1; }
+        else if (Input.GetKey(KeyCode.D)) { moveX = 1; }
+        if (Input.GetKey(KeyCode.W)) { moveZ = 1; }
+        else if (Input.GetKey(KeyCode.S)) { moveZ = -1; }
+
+        if (Input.GetKeyDown(KeyCode.Space) && !isAttack && !isDodge)
         {
-            if (inputMagnitude != 0)
+            Dodge();
+        }
+        if (Input.GetKeyDown(KeyCode.Mouse0) && !isAttack && !isDodge)
+        {
+            Charge();
+        }
+        if (Input.GetKey(KeyCode.Mouse0))
+        {
+            chargeTime += Time.deltaTime;
+            attackDamage += chargeTime * 1.2f;
+            if (chargeTime >= 3f)
             {
-                playerDirection = inputWalk;
-                animator.SetFloat("playerDirectionX", playerDirection.x);
-                animator.SetFloat("playerDirectionY", playerDirection.y);
-
-                if (inputWalk.x > 0)
-                {
-                    hitboxController.localRotation = Quaternion.Euler(0, 0, 0);
-                }
-                else if (inputWalk.x < 0)
-                {
-                    hitboxController.rotation = Quaternion.Euler(0, -180, 0);
-                }
-                else if (inputWalk.y != 0)
-                {
-                    hitboxController.localRotation = Quaternion.Euler(0, -inputWalk.y * 90, 0);
-                }
+                attackDamage = 3f;
             }
         }
-        
-        
 
 
-    }
-
-    void FixedUpdate()
-    {
-
-        if (!isAttack)
+        if (isDodge)
         {
+            rb.velocity = new Vector3(moveDirection.x * dodgeAcceleration, 0f, moveDirection.z * dodgeAcceleration);
+            dodgeAcceleration *= 0.9f;
 
-            Vector3 moveDirection = new Vector3(inputWalk.x, 0f, inputWalk.y);
-            Vector3 targetVelocity = moveDirection.normalized * moveSpeed;
-            targetVelocity.z *= 1.5f;
+            if (dodgeAcceleration <= 0.15f)
+            {
+                invincible = false;
+            }
 
-            // 현재 Rigidbody의 Y축 속도는 그대로 유지하면서 XZ 평면의 속도만 변경
-            // (이렇게 하면 나중에 점프나 중력 같은 Y축 움직임을 추가했을 때 서로 간섭하지 않아.)
-            // 만약 Y축 움직임이 전혀 없고 바닥에만 붙어 다닌다면 targetVelocity.y = 0f; 로 해도 돼.
-            targetVelocity.y = rb.velocity.y;
-            rb.velocity = targetVelocity;
+            if (dodgeAcceleration <= 0.07f)
+            {
+                DodgeEnd();
+            }
+            return;
+        }
+
+        if (isAttack)
+        {
+            if (Input.GetKeyUp(KeyCode.Mouse0))
+            {
+                if (chargeTime >= 2.5)
+                {
+                    playerSprite.SetTrigger("playerAttack");
+                }
+                else if (chargeTime >= 1.5)
+                {
+                    playerSprite.SetTrigger("playerAttack");
+                }
+                else
+                {
+                    playerSprite.SetTrigger("playerAttack");
+                }
+                AttackEnd();
+            }
+            if (chargeTime >= 3.5)
+            {
+                playerSprite.SetTrigger("playerAttack");
+                isAttack = false;
+            }
+            return;
+        }
+
+        // �÷��̾� �̵�
+
+        float curentSpeed = new Vector2(moveX, moveZ).magnitude;
+        playerSprite.SetFloat("playerWalkSpeed", curentSpeed);
+        if (curentSpeed > 0)
+        {
+            playerSprite.SetFloat("playerDirectionX", moveX);
+            playerSprite.SetFloat("playerDirectionY", moveZ);
+            moveDirection = new Vector3(moveX, 0f, moveZ).normalized;
+            rb.velocity = moveDirection * moveSpeed;
         }
     }
-    private void OnAttack(InputAction.CallbackContext context)
+
+    private void OnTriggerEnter(Collider other)
     {
-        if (!isAttack)
+        if (invincible)
         {
-            animator.SetTrigger("playerAttack");
+            Debug.Log("ȸ�� ����");
+            return;
         }
-        
+        else if (other.CompareTag("TyrAttackCollider"))
+        {
+            playerHp -= 1;
+            StartCoroutine(ResetInvincibility());
+        }
+    }
+    IEnumerator ResetInvincibility()
+    {
+        yield return new WaitForSeconds(0.5f);
+        invincible = false;
+    }
+
+    private void Dodge()
+    {
+        isDodge = true;
+        invincible = true;
+        playerSprite.SetTrigger("playerDodge");
+
+    }
+    public void DodgeEnd()
+    {
+        dodgeAcceleration = 10f;
+        isDodge = false;
+    }
+    private void Charge()
+    {
         isAttack = true;
-
+        playerSprite.SetTrigger("playerCharge");
     }
-    public void AttackFinish()
+    public void AttackEnd()
     {
         isAttack = false;
-    }
-
-    public void HitboxActive()
-    {
-        attackHitBox.SetActive(true);
-    }
-    public void HitboxInactive()
-    {
-        attackHitBox.SetActive(false);
-    }
-}
-
-public class Clock
-{
-    private float saveTime = 0f;
-
-    public void StartTime()
-    {
-        saveTime = 0f;
-    }
-
-    public bool TimeUp(float aimTime)
-    {
-        saveTime += Time.deltaTime;
-
-        if (saveTime >= aimTime)
-        {
-            return true;
-        }
-        return false;
+        attackDamage = 1f;
     }
 }
 

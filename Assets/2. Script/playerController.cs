@@ -54,16 +54,8 @@ public class PlayerController : MonoBehaviour
         }
         if (Input.GetKeyDown(KeyCode.Mouse0) && !isAttack && !isDodge)
         {
+            Debug.Log("공격 시작");
             Charge();
-        }
-        if (Input.GetKey(KeyCode.Mouse0))
-        {
-            chargeTime += Time.deltaTime;
-            attackDamage += chargeTime * 1.2f;
-            if (chargeTime >= 3f)
-            {
-                attackDamage = 3f;
-            }
         }
 
 
@@ -86,7 +78,22 @@ public class PlayerController : MonoBehaviour
 
         if (isAttack)
         {
-            if (Input.GetKeyUp(KeyCode.Mouse0))
+
+            Debug.Log("공격 중");
+            chargeTime += Time.deltaTime;
+            attackDamage = chargeTime * 1.2f;
+            if (chargeTime >= 3f)
+            {
+                attackDamage = 3f;
+            }
+            bool triggerAttack = false;
+
+            if (Input.GetKeyUp(KeyCode.Mouse0) || chargeTime >= 3.5)
+            {
+                triggerAttack = true;
+            }
+
+            if (triggerAttack)
             {
                 if (chargeTime >= 2.5)
                 {
@@ -100,12 +107,6 @@ public class PlayerController : MonoBehaviour
                 {
                     playerSprite.SetTrigger("playerAttack");
                 }
-                AttackEnd();
-            }
-            if (chargeTime >= 3.5)
-            {
-                playerSprite.SetTrigger("playerAttack");
-                isAttack = false;
             }
             return;
         }
@@ -163,6 +164,8 @@ public class PlayerController : MonoBehaviour
     {
         isAttack = false;
         attackDamage = 1f;
+        chargeTime = 0f;
+        Debug.Log("공격 종료");
     }
 }
 

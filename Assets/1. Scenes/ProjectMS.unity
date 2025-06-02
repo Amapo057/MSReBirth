@@ -315,6 +315,7 @@ MonoBehaviour:
   tyrHP: 0
   Force: 100
   canMove: 1
+  attackSpeed: 3
   isReady: 0
 --- !u!1 &237839435
 GameObject:
@@ -958,6 +959,7 @@ GameObject:
   - component: {fileID: 910063573}
   - component: {fileID: 910063571}
   - component: {fileID: 910063572}
+  - component: {fileID: 910063575}
   m_Layer: 0
   m_Name: playerSprite
   m_TagString: Untagged
@@ -1065,6 +1067,19 @@ Transform:
   m_Children: []
   m_Father: {fileID: 514747507}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &910063575
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 910063570}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3b44ef3874224e84a8a77fa5bff8861b, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  playerController: {fileID: 514747505}
 --- !u!1 &1242236572
 GameObject:
   m_ObjectHideFlags: 0

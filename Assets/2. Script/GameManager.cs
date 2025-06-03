@@ -15,11 +15,11 @@ public class GameManager : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        // ÇÃ·¹ÀÌ¾î HP Ç¥½Ã
+        // ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ HP Ç¥ï¿½ï¿½
         playerHpText.text = "Player HP: " + playerScript.playerHp.ToString("F0");
-        // Æ¼¸£ HP Ç¥½Ã
-        tyrHpText.text = "Tyr HP: " + tyrScript.tyrHP.ToString("F0");
-        // ÇÃ·¹ÀÌ¾î°¡ Á×¾úÀ» ¶§
+        // Æ¼ï¿½ï¿½ HP Ç¥ï¿½ï¿½
+        tyrHpText.text = "Tyr HP: " + tyrScript.tyrHp.ToString("F0");
+        // ï¿½Ã·ï¿½ï¿½Ì¾î°¡ ï¿½×¾ï¿½ï¿½ï¿½ ï¿½ï¿½
         if (playerScript.playerHp <= 0)
         {
             playerScript.playerSprite.SetTrigger("Die");

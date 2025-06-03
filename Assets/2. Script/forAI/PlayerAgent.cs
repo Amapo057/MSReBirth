@@ -166,7 +166,7 @@ public class PlayerAgent : Agent
         sensor.AddObservation(relativePosToTyr.x / estimatedMaxDistance);
         sensor.AddObservation(relativePosToTyr.z / estimatedMaxDistance);
         sensor.AddObservation(relativePosToTyr.magnitude / estimatedMaxDistance);
-        if (tyr.tyrMaxHP > 0) { sensor.AddObservation(tyr.tyrHP / tyr.tyrMaxHP); }
+        if (tyr.tyrMaxHp > 0) { sensor.AddObservation(tyr.tyrHp / tyr.tyrMaxHp); }
         else { sensor.AddObservation(0f); }
         sensor.AddObservation(tyr.isWalk ? 1f : 0f);
         sensor.AddObservation(tyr.isAttack ? 1f : 0f);

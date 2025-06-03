@@ -6,16 +6,20 @@ public class PlayerSpriteController : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-        
+
     }
 
     // Update is called once per frame
     void Update()
     {
-        
+
     }
     public void CallAttackEnd()
     {
         playerController.AttackEnd();
+    }
+    public void CallHitEnd()
+    {
+        playerController.HitEnd();
     }
 }

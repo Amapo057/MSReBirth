@@ -11,7 +11,9 @@ public class TyrController : MonoBehaviour
     private Animator anim;
     public SpriteRenderer body;
     public SpriteRenderer Leg;
-    public PlayerAgent playerAgent;
+    // public PlayerAgent playerAgent;
+    public PlayerController playerController;
+    public CameraShaker cameraShaker;
     Rigidbody rb;
 
 
@@ -27,8 +29,8 @@ public class TyrController : MonoBehaviour
     private bool rightDirection = true;
     private int walkNumber = 0;
     private float distanceThreshold = 1.5f;
-    public float tyrMaxHP = 10f;
-    public float tyrHP;
+    public float tyrMaxHp = 10f;
+    public float tyrHp;
     private int stuck = 0;
     public float Force = 100f;
     public bool canMove = true; // Tyr가 움직일 수 있는지 여부
@@ -36,7 +38,7 @@ public class TyrController : MonoBehaviour
     private float maxZPosition = 5f;
     private bool isInvincible = false;
     private bool attackMotion = false;
-    private int attackNumner = 0;
+    public int attackNumber = 0;
     public float attackSpeed = 3f;
 
     // 학습용 변수
@@ -49,14 +51,14 @@ public class TyrController : MonoBehaviour
         anim = GetComponent<Animator>();
         rb = GetComponent<Rigidbody>();
         targetPosition = player.transform.position;
-        tyrHP = tyrMaxHP;
+        tyrHp = tyrMaxHp;
 
     }
     public void ResetTyrState()
     {
         Debug.Log("====== [TyrController] ResetTyrState() - START ======");
         Debug.Log("[TyrController] Tyr 상태 초기화.");
-        tyrHP = tyrMaxHP; // 체력을 최대로 회복
+        tyrHp = tyrMaxHp; // 체력을 최대로 회복
         isWalk = true;   // 필요에 따라 초기 상태로 설정
         isAttack = false;
         isReady = false;  // 또는 게임 시작 시 Tyr의 기본 상태로 설정
@@ -84,27 +86,68 @@ public class TyrController : MonoBehaviour
     {
         if (other.CompareTag("PlayerAttackCollider") && !isInvincible)
         {
-            tyrHP -= 1;
+            float damage = playerController.attackDamage;
+            tyrHp -= damage;
+            if (damage <= 2f)
+            {
+                cameraShaker.ShakeCamera(0.1f, 0.05f, 0.2f);
+                TriggerHitStop();
+            }
+            else
+            {
+                cameraShaker.ShakeCamera(0.15f, 0.11f, 0.6f);
+                TriggerHitStop2();
+            }
+            
             isInvincible = true;
             StartCoroutine(ResetInvincibility());
             // playerAgent.PlayerHitTyr(-1);
         }
-        if (tyrHP <= 0)
+        if (tyrHp <= 0)
         {
-            tyrHP = 0;
+            tyrHp = 0;
             // 여기에 Tyr 사망 관련 로직 (애니메이션, 움직임 중지 등) 추가
             Debug.LogWarning("[TyrController] Tyr 사망!");
 
-            if (playerAgent != null)
-            {
-                playerAgent.TyrDefeated(); // PlayerAgent에게 Tyr가 격파되었음을 알림
-            }
-            else
-            {
-                Debug.LogError("[TyrController] PlayerAgent 참조가 할당되지 않아 TyrDefeated를 호출할 수 없습니다!");
-            }
+            // if (playerAgent != null)
+            // {
+            //     playerAgent.TyrDefeated(); // PlayerAgent에게 Tyr가 격파되었음을 알림
+            // }
+            // else
+            // {
+            //     Debug.LogError("[TyrController] PlayerAgent 참조가 할당되지 않아 TyrDefeated를 호출할 수 없습니다!");
+            // }
             // gameObject.SetActive(false); // 예: Tyr 비활성화
         }
+    }
+    public void TriggerHitStop()
+    {
+        StartCoroutine(HitStopCoroutine1());
+    }
+    public void TriggerHitStop2()
+    {
+        StartCoroutine(HitStopCoroutine2());
+    }
+
+    IEnumerator HitStopCoroutine1()
+    {
+        float originalTimeScale = Time.timeScale; // 원래 시간 배율 저장
+        Time.timeScale = 0.1f;        // 시간 느리게 만들기
+
+        // 주의: Time.timeScale의 영향을 받지 않는 WaitForSecondsRealtime 사용
+        yield return new WaitForSecondsRealtime(0.1f);
+
+        Time.timeScale = originalTimeScale;       // 원래 시간 배율로 복구
+    }
+    IEnumerator HitStopCoroutine2()
+    {
+        float originalTimeScale = Time.timeScale; // 원래 시간 배율 저장
+        Time.timeScale = 0.1f;        // 시간 느리게 만들기
+
+        // 주의: Time.timeScale의 영향을 받지 않는 WaitForSecondsRealtime 사용
+        yield return new WaitForSecondsRealtime(0.2f);
+
+        Time.timeScale = originalTimeScale;       // 원래 시간 배율로 복구
     }
     IEnumerator ResetInvincibility()
     {
@@ -161,12 +204,12 @@ public class TyrController : MonoBehaviour
                     if (localPlayerX < 0) // 플레이어가 Tyr의 로컬 오른쪽 (+X)
                     {
                         anim.SetTrigger("tyrSideTail");
-                        attackNumner = 1;
+                        attackNumber = 1;
                     }
                     else // 플레이어가 Tyr의 로컬 왼쪽 (-X)
                     {
                         anim.SetTrigger("tyrBite");
-                        attackNumner = 2;
+                        attackNumber = 2;
                     }
                 }
                 else // 플레이어가 Tyr의 앞 또는 뒤에 더 가까울 때
@@ -174,19 +217,19 @@ public class TyrController : MonoBehaviour
                     if (localPlayerZ > 0) // 플레이어가 Tyr의 로컬 앞쪽 (+Z)
                     {
                         anim.SetTrigger("tyrSideTail");
-                        attackNumner = 1;
+                        attackNumber = 1;
                     }
                     else // 플레이어가 Tyr의 로컬 뒤쪽 (-Z)
                     {
                         // 뒤쪽 공격 애니메이션이 있다면 설정, 없다면 다른 적절한 공격
                         anim.SetTrigger("tyrTackle");
-                        attackNumner = 3;
+                        attackNumber = 3;
                     }
                 }
                 Debug.Log("Attack");
                 attackMotion = false;
             }
-            AttackMove();
+            // AttackMove();
             
         }
         else // isAttack이 false일 때 (이동 또는 공격 결정 단계)
@@ -267,7 +310,7 @@ public class TyrController : MonoBehaviour
     }
     public void AttackMove()
     {
-        switch (attackNumner)
+        switch (attackNumber)
         {
             case 1:
                 rb.velocity = new Vector3(0f, 0f, 1f*attackSpeed);

@@ -6,7 +6,7 @@ using UnityEngine.EventSystems;
 
 public class PlayerController : MonoBehaviour
 {
-    // ÇÃ·¹ÀÌ¾î ÀÛµ¿ º¯¼ö
+    // ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½Ûµï¿½ ï¿½ï¿½ï¿½ï¿½
     public float moveSpeed = 2f;
     private Vector3 moveDirection = new Vector3(1f, 0f, 0f);
     public float playerHp = 10;
@@ -16,15 +16,17 @@ public class PlayerController : MonoBehaviour
     private bool invincible = false;
 
     private bool isAttack = false;
+    private bool isHit = false;
     private float chargeTime = 0f;
-    private float attackDamage = 1f;
+    public float attackDamage = 1f;
+    public float playerKnockbackForce = 5f;
 
-    // ÇÃ·¹ÀÌ¾î Âü°í ¿ÀºêÁ§Æ®
+    // ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
     public Animator playerSprite;
     public GameObject playerHitbox;
     public GameObject tyr;
-
-    // ÇÃ·¹ÀÌ¾î ÄÄÆ÷³ÍÆ®
+    public CameraShaker cameraShaker;
+    // ï¿½Ã·ï¿½ï¿½Ì¾ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Æ®
     private Rigidbody rb;
 
     private void Start()
@@ -35,14 +37,18 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
-
     }
 
     private void FixedUpdate()
     {
         float moveX = 0;
         float moveZ = 0;
-        // Å° ÀÔ·Â
+
+        if (isHit)
+        {
+            return;
+        }
+
         if (Input.GetKey(KeyCode.A)) { moveX = -1; }
         else if (Input.GetKey(KeyCode.D)) { moveX = 1; }
         if (Input.GetKey(KeyCode.W)) { moveZ = 1; }
@@ -54,10 +60,8 @@ public class PlayerController : MonoBehaviour
         }
         if (Input.GetKeyDown(KeyCode.Mouse0) && !isAttack && !isDodge)
         {
-            Debug.Log("°ø°İ ½ÃÀÛ");
             Charge();
         }
-
 
         if (isDodge)
         {
@@ -78,28 +82,20 @@ public class PlayerController : MonoBehaviour
 
         if (isAttack)
         {
-
-            Debug.Log("°ø°İ Áß");
-            chargeTime += Time.deltaTime;
-            attackDamage = chargeTime * 1.2f;
-            if (chargeTime >= 3f)
-            {
-                attackDamage = 3f;
-            }
             bool triggerAttack = false;
 
-            if (Input.GetKeyUp(KeyCode.Mouse0) || chargeTime >= 3.5)
+            if (Input.GetKeyUp(KeyCode.Mouse0))
+            {
+                triggerAttack = true;
+            }
+            if (chargeTime >= 3.5f)
             {
                 triggerAttack = true;
             }
 
             if (triggerAttack)
             {
-                if (chargeTime >= 2.5)
-                {
-                    playerSprite.SetTrigger("playerAttack");
-                }
-                else if (chargeTime >= 1.5)
+                if (chargeTime >= 1.6f || chargeTime <= 2f)
                 {
                     playerSprite.SetTrigger("playerAttack");
                 }
@@ -108,10 +104,17 @@ public class PlayerController : MonoBehaviour
                     playerSprite.SetTrigger("playerAttack");
                 }
             }
+            else
+            {
+                chargeTime += Time.deltaTime;
+                attackDamage = chargeTime * 2f;
+                if (chargeTime >= 2.5f)
+                {
+                    attackDamage = 2f;
+                }
+            }
             return;
         }
-
-        // ÇÃ·¹ÀÌ¾î ÀÌµ¿
 
         float curentSpeed = new Vector2(moveX, moveZ).magnitude;
         playerSprite.SetFloat("playerWalkSpeed", curentSpeed);
@@ -128,20 +131,54 @@ public class PlayerController : MonoBehaviour
     {
         if (invincible)
         {
-            Debug.Log("È¸ÇÇ ¼º°ø");
             return;
         }
         else if (other.CompareTag("TyrAttackCollider"))
         {
-            playerHp -= 1;
-            StartCoroutine(ResetInvincibility());
+            cameraShaker.ShakeCamera();
+            
+            PlayerTookDamage();
+
+            playerSprite.SetTrigger("playerHit");
+        }
+    }
+    public void PlayerTookDamage()
+    {
+        isHit = true;
+        playerHp -= 1f;
+        StartCoroutine(ResetInvincibility());
+        AttackEnd();
+        DodgeEnd();
+        if (rb != null && tyr != null) // Rigidbodyì™€ Tyr ì°¸ì¡°ê°€ ëª¨ë‘ ìˆì–´ì•¼ í•¨
+        {
+            Vector3 knockbackDirection = (transform.position - tyr.transform.position);
+
+            if (knockbackDirection == Vector3.zero)
+            {
+                knockbackDirection = -transform.forward; // í”Œë ˆì´ì–´ì˜ ë“± ë’¤ ë°©í–¥
+            }
+
+            knockbackDirection.y = 0.5f;
+
+            rb.AddForce(knockbackDirection.normalized * playerKnockbackForce, ForceMode.Impulse);
+            Debug.Log($"[PlayerAgent] í”Œë ˆì´ì–´ ë„‰ë°±! ë°©í–¥: {knockbackDirection.normalized.ToString("F2")}, í˜: {playerKnockbackForce}");
+        }
+        // --- ë„‰ë°± ë¡œì§ ë ---
+
+        // ì—­ê²½ì§ íš¨ê³¼ (ì´ì „ì— ì¶”ê°€í•˜ì…¨ë‹¤ë©´ ì—¬ê¸°ì— ë˜ëŠ” OnTriggerEnterì— ìˆì„ ìˆ˜ ìˆìŒ)
+        // ApplyHitStop(); 
+
+        if (playerHp <= 0)
+        {
+            playerHp = 0;
         }
     }
     IEnumerator ResetInvincibility()
     {
-        yield return new WaitForSeconds(0.5f);
+        yield return new WaitForSeconds(0.6f);
         invincible = false;
     }
+    
 
     private void Dodge()
     {
@@ -165,7 +202,10 @@ public class PlayerController : MonoBehaviour
         isAttack = false;
         attackDamage = 1f;
         chargeTime = 0f;
-        Debug.Log("°ø°İ Á¾·á");
+    }
+    public void HitEnd()
+    {
+        isHit = false;
     }
 }
 

@@ -66,14 +66,14 @@ public class PlayerController : MonoBehaviour
         if (isDodge)
         {
             rb.velocity = new Vector3(moveDirection.x * dodgeAcceleration, 0f, moveDirection.z * dodgeAcceleration);
-            dodgeAcceleration *= 0.9f;
+            dodgeAcceleration *= 0.93f;
 
-            if (dodgeAcceleration <= 0.15f)
+            if (dodgeAcceleration <= 0.25f)
             {
                 invincible = false;
             }
 
-            if (dodgeAcceleration <= 0.07f)
+            if (dodgeAcceleration <= 0.3f)
             {
                 DodgeEnd();
             }

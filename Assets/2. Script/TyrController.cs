@@ -15,6 +15,8 @@ public class TyrController : MonoBehaviour
     public PlayerController playerController;
     public CameraShaker cameraShaker;
     Rigidbody rb;
+    public Collider tyrCollider;
+    public GameObject spakePrefab;
 
 
     Vector3 targetPosition;
@@ -53,6 +55,7 @@ public class TyrController : MonoBehaviour
         targetPosition = player.transform.position;
         tyrHp = tyrMaxHp;
 
+
     }
     public void ResetTyrState()
     {
@@ -88,6 +91,16 @@ public class TyrController : MonoBehaviour
         {
             float damage = playerController.attackDamage;
             tyrHp -= damage;
+            if (spakePrefab != null)
+            {
+                Vector3 spawnPosition;
+
+                spawnPosition = tyrCollider.ClosestPoint(other.transform.position);
+
+                // 파티클 프리팹을 계산된 위치에 생성합니다. Quaternion.identity는 회전 없음을 의미합니다.
+                Instantiate(spakePrefab, spawnPosition, Quaternion.identity);
+                Debug.Log($"[TyrController] 스파크 파티클 생성 위치: {spawnPosition.ToString("F2")}");
+            }
             if (damage <= 2f)
             {
                 cameraShaker.ShakeCamera(0.1f, 0.05f, 0.2f);

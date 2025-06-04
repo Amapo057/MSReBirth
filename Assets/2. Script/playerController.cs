@@ -68,12 +68,12 @@ public class PlayerController : MonoBehaviour
             rb.velocity = new Vector3(moveDirection.x * dodgeAcceleration, 0f, moveDirection.z * dodgeAcceleration);
             dodgeAcceleration *= 0.93f;
 
-            if (dodgeAcceleration <= 0.25f)
+            if (dodgeAcceleration <= 0.3f)
             {
                 invincible = false;
             }
 
-            if (dodgeAcceleration <= 0.3f)
+            if (dodgeAcceleration <= 0.25f)
             {
                 DodgeEnd();
             }
@@ -163,10 +163,6 @@ public class PlayerController : MonoBehaviour
             rb.AddForce(knockbackDirection.normalized * playerKnockbackForce, ForceMode.Impulse);
             Debug.Log($"[PlayerAgent] 플레이어 넉백! 방향: {knockbackDirection.normalized.ToString("F2")}, 힘: {playerKnockbackForce}");
         }
-        // --- 넉백 로직 끝 ---
-
-        // 역경직 효과 (이전에 추가하셨다면 여기에 또는 OnTriggerEnter에 있을 수 있음)
-        // ApplyHitStop(); 
 
         if (playerHp <= 0)
         {

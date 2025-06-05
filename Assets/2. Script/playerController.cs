@@ -20,6 +20,10 @@ public class PlayerController : MonoBehaviour
     private float chargeTime = 0f;
     public float attackDamage = 1f;
     public float playerKnockbackForce = 5f;
+    float moveX = 0;
+    float moveZ = 0;
+    bool triggerAttack = false;
+    bool chargeEnd = false;
 
     // �÷��̾� ���� ������Ʈ
     public Animator playerSprite;
@@ -37,12 +41,8 @@ public class PlayerController : MonoBehaviour
 
     private void Update()
     {
-    }
-
-    private void FixedUpdate()
-    {
-        float moveX = 0;
-        float moveZ = 0;
+        moveX = 0;
+        moveZ = 0;
 
         if (isHit)
         {
@@ -62,7 +62,18 @@ public class PlayerController : MonoBehaviour
         {
             Charge();
         }
+        if (isAttack && !chargeEnd)
+        {
+            if (Input.GetKeyUp(KeyCode.Mouse0))
+            {
+                triggerAttack = true;
+                chargeEnd = true;
+            }
+        }
+    }
 
+    private void FixedUpdate()
+    {
         if (isDodge)
         {
             rb.velocity = new Vector3(moveDirection.x * dodgeAcceleration, 0f, moveDirection.z * dodgeAcceleration);
@@ -82,12 +93,6 @@ public class PlayerController : MonoBehaviour
 
         if (isAttack)
         {
-            bool triggerAttack = false;
-
-            if (Input.GetKeyUp(KeyCode.Mouse0))
-            {
-                triggerAttack = true;
-            }
             if (chargeTime >= 3.5f)
             {
                 triggerAttack = true;
@@ -95,14 +100,9 @@ public class PlayerController : MonoBehaviour
 
             if (triggerAttack)
             {
-                if (chargeTime >= 1.6f || chargeTime <= 2f)
-                {
-                    playerSprite.SetTrigger("playerAttack");
-                }
-                else
-                {
-                    playerSprite.SetTrigger("playerAttack");
-                }
+                Debug.Log("트리거");
+                playerSprite.SetTrigger("playerAttack");
+                triggerAttack = false;
             }
             else
             {
@@ -161,13 +161,8 @@ public class PlayerController : MonoBehaviour
             knockbackDirection.y = 0.5f;
 
             rb.AddForce(knockbackDirection.normalized * playerKnockbackForce, ForceMode.Impulse);
-            Debug.Log($"[PlayerAgent] 플레이어 넉백! 방향: {knockbackDirection.normalized.ToString("F2")}, 힘: {playerKnockbackForce}");
         }
 
-        if (playerHp <= 0)
-        {
-            playerHp = 0;
-        }
     }
     IEnumerator ResetInvincibility()
     {
@@ -192,9 +187,14 @@ public class PlayerController : MonoBehaviour
     {
         isAttack = true;
         playerSprite.SetTrigger("playerCharge");
+        chargeTime = 0f;
+        triggerAttack = false;
+        attackDamage = 1f;
+        chargeEnd = false;
     }
     public void AttackEnd()
     {
+        triggerAttack = false;
         isAttack = false;
         attackDamage = 1f;
         chargeTime = 0f;

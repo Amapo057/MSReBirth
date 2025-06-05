@@ -29,7 +29,6 @@ public class TyrController : MonoBehaviour
     public bool isWalk = true;
     public bool isAttack = false;
     private bool rightDirection = true;
-    private int walkNumber = 0;
     private float distanceThreshold = 1.5f;
     public float tyrMaxHp = 10f;
     public float tyrHp;
@@ -90,9 +89,7 @@ public class TyrController : MonoBehaviour
 
                 spawnPosition = tyrCollider.ClosestPoint(other.transform.position);
 
-                // 파티클 프리팹을 계산된 위치에 생성합니다. Quaternion.identity는 회전 없음을 의미합니다.
                 Instantiate(spakePrefab, spawnPosition, Quaternion.identity);
-                Debug.Log($"[TyrController] 스파크 파티클 생성 위치: {spawnPosition.ToString("F2")}");
             }
             if (damage <= 2f)
             {
@@ -112,8 +109,6 @@ public class TyrController : MonoBehaviour
         if (tyrHp <= 0)
         {
             tyrHp = 0;
-            // 여기에 Tyr 사망 관련 로직 (애니메이션, 움직임 중지 등) 추가
-            Debug.LogWarning("[TyrController] Tyr 사망!");
         }
     }
     public void TriggerHitStop()
@@ -214,47 +209,42 @@ public class TyrController : MonoBehaviour
         }
         else
         {
-            if (transform.position == beforePosition)
+            // if (transform.position == beforePosition)
+            // {
+            //     stuck++;
+            //     if (stuck >= 50)
+            //     {
+            //         if (player != null) targetPosition = player.transform.position;
+            //         stuck = 0;
+            //         isWalk = true;
+            //         walkNumber = 0;
+            //         Debug.Log("[TyrController] Stuck! Player 위치로 타겟 재설정.");
+            //     }
+            // }
+            // else
+            // {
+            //     stuck = 0;
+            // }
+            // beforePosition = transform.position;
+
+            float playerDistance = Vector3.Distance(transform.position, player.transform.position);
+
+            if (playerDistance <= distanceThreshold)
             {
-                stuck++;
-                if (stuck >= 50)
-                {
-                    if (player != null) targetPosition = player.transform.position;
-                    stuck = 0;
-                    isWalk = true;
-                    walkNumber = 0;
-                    Debug.Log("[TyrController] Stuck! Player 위치로 타겟 재설정.");
-                }
+                isAttack = true;
+                attackMotion = true;
+                isWalk = false;
+                isReady = true;
             }
             else
             {
-                stuck = 0;
-            }
-            beforePosition = transform.position;
-
-            float targetDistance = Vector3.Distance(transform.position, targetPosition);
-            float playerDistance = Vector3.Distance(transform.position, player.transform.position);
-
-            if (targetDistance <= distanceThreshold)
-            {
-                if (playerDistance <= 1.5f || walkNumber >= 1)
-                {
-                    isAttack = true;
-                    attackMotion = true;
-                    isWalk = false;
-                    walkNumber = 0;
-                }
-                else
-                {
-                    walkNumber++;
-                    if (player != null) targetPosition = player.transform.position;
-                    isWalk = true;
-                }
+                isWalk = true;
             }
 
             if (isWalk && canMove)
             {
-                transform.position = Vector3.MoveTowards(transform.position, targetPosition, speed * Time.fixedDeltaTime);
+                Vector3 currentTargetPosition = player.transform.position;
+                transform.position = Vector3.MoveTowards(transform.position, currentTargetPosition, speed * Time.fixedDeltaTime);
             }
         }
     }
@@ -269,7 +259,6 @@ public class TyrController : MonoBehaviour
     {
         targetPosition = player.transform.position;
         isWalk = true;
-        walkNumber = 0;
         isAttack = false;
         stuck = 0;
         isReady = false;

@@ -3,8 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
-using System;
-
+using UnityEngine.SceneManagement;
 public class GameManager : MonoBehaviour
 {
     public PlayerController playerScript;
@@ -32,6 +31,17 @@ public class GameManager : MonoBehaviour
 
         playerHpBar.value = currentPlayerHp;
         tyrHpBar.value = currentTyrHp;
+        if (playerScript.playerHp <= 0)
+        {
+            SceneManager.LoadScene("4_Lose");
+            Time.timeScale = 1f;
+
+        }
+        else if (tyrScript.tyrHp <= 0)
+        {
+            SceneManager.LoadScene("5_Win");
+            Time.timeScale = 1f;
+        }
 
 
     }

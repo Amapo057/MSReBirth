@@ -100,7 +100,7 @@ public class PlayerController : MonoBehaviour
 
             if (triggerAttack)
             {
-                Debug.Log("트리거");
+
                 playerSprite.SetTrigger("playerAttack");
                 triggerAttack = false;
             }

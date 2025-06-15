@@ -29,11 +29,22 @@ public class PlayerAgent : Agent
     public float playerMaxHP = 3f; // 플레이어 최대 체력
     public float playerHP;         // 현재 플레이어 체력
     public float invincibilityDuration = 1f; // 피격 후 무적 시간 (초)
-    private bool isInvincible = false;      // 현재 무적 상태인지
+    private bool invincible = false;      // 현재 무적 상태인지
     private Vector3 initialPlayerPosition;  // 플레이어 초기 위치
     private bool isDodge = false;
     private Vector3 playerDirection;
     private float dodgeAcceleration = 10;
+
+    private Vector3 moveDirection = new Vector3(1f, 0f, 0f);
+
+    float moveX;
+    float moveZ;
+    float chargeTime = 0f;
+    float attackDamage = 1f;
+    bool isHit = false;
+    bool isAttack = false;
+    bool chargeEnd = false;
+    bool triggerAttack = false;
 
     [Header("Rewards")]
     public float rewardDefeatTyr = 5.0f;
@@ -50,13 +61,12 @@ public class PlayerAgent : Agent
 
     // 내부 컴포넌트 참조
     private Rigidbody rb;
-    private Animator animator;
+    public Animator playerSprite;
     private ActionManager inputActions;
 
     void Awake()
     {
         rb = GetComponent<Rigidbody>();
-        animator = GetComponent<Animator>();
         try
         {
             inputActions = new ActionManager();
@@ -71,7 +81,7 @@ public class PlayerAgent : Agent
         initialPlayerPosition = transform.localPosition;
 
         if (rb == null) Debug.LogError("[PlayerAgent] Awake: Rigidbody 컴포넌트를 찾을 수 없습니다!", this);
-        if (animator == null) Debug.LogError("[PlayerAgent] Awake: Animator 컴포넌트를 찾을 수 없습니다!", this);
+        if (playerSprite == null) Debug.LogError("[PlayerAgent] Awake: playerSprite 컴포넌트를 찾을 수 없습니다!", this);
         if (tyr == null) Debug.LogError("[PlayerAgent] Awake: Tyr 참조가 Inspector에서 할당되지 않았습니다!", this);
         if (agentAttackHitBox == null) Debug.LogWarning("[PlayerAgent] Awake: agentAttackHitBox가 Inspector에서 할당되지 않았습니다.", this);
         if (agentHitboxController == null) Debug.LogWarning("[PlayerAgent] Awake: agentHitboxController가 Inspector에서 할당되지 않았습니다.", this);
@@ -102,7 +112,7 @@ public class PlayerAgent : Agent
     public override void OnEpisodeBegin()
     {
         agentIsAttack = false;
-        isInvincible = false;
+        invincible = false;
         playerHP = playerMaxHP;
 
         transform.localPosition = initialPlayerPosition; // 저장된 초기 위치로 리셋
@@ -141,7 +151,7 @@ public class PlayerAgent : Agent
         else { sensor.AddObservation(0f); sensor.AddObservation(1f); }
         sensor.AddObservation(agentIsAttack ? 0f : 1f);
         sensor.AddObservation(playerMaxHP > 0 ? playerHP / playerMaxHP : 0f); // playerMaxHP 0 방지
-        sensor.AddObservation(isInvincible ? 1f : 0f);
+        sensor.AddObservation(invincible ? 1f : 0f);
 
         // Tyr 조준 정확도 (1개)
         if (tyr != null && agentHitboxController != null)
@@ -175,142 +185,86 @@ public class PlayerAgent : Agent
 
     public override void Heuristic(in ActionBuffers actionsOut)
     {
-        // var continuousActions = actionsOut.ContinuousActions;
-        // var discreteActions = actionsOut.DiscreteActions;
-        // continuousActions[0] = 0f; continuousActions[1] = 0f; discreteActions[0] = 0;
+        moveX = 0;
+        moveZ = 0;
 
-        // if (!isDodge)
-        // {
-
-        //     if (inputActions != null && inputActions.playerAction.walk != null && inputActions.playerAction.Get().enabled)
-        //     {
-        //         Vector2 moveInput = inputActions.playerAction.walk.ReadValue<Vector2>();
-        //         continuousActions[0] = moveInput.x;
-        //         continuousActions[1] = moveInput.y;
-        //         playerDirection = new Vector3(continuousActions[0], 0f, continuousActions[1]);
-        //     }
-        //     if (Input.GetMouseButton(0) && !agentIsAttack) { discreteActions[0] = 1; }
-
-        //     if (Input.GetKey(KeyCode.Space))
-        //     {
-        //         PlayerDodge();
-        //     }
-        // }
-        // else
-        // {
-        //     dodgeAcceleration += 1;
-        //     rb.AddForce(playerDirection.normalized * 500 / (dodgeAcceleration / 2), ForceMode.Force);
-        // }
-        float moveX = 0f;
-        float moveZ = 0f;
-        if (Input.GetKey(KeyCode.A)){moveX = -1f;}
-        else if(Input.GetKey(KeyCode.D)){ moveX = 1f; }
-        if (Input.GetKey(KeyCode.W)){ moveZ = 1f; }
-        else if (Input.GetKey(KeyCode.S)){ moveZ = -1f; }
-
-        // 1. 현재 '회피 중'(`isDodge == true`)일 때의 물리 처리 (닥터의 고유 로직)
-        if (isDodge)
+        if (isHit)
         {
-            // 닥터의 회피 중 물리 로직 (예: dodgeAcceleration을 사용한 움직임)
-            // 이 블록의 코드는 닥터께서 직접 작성/관리하시는 부분입니다.
-            // 예시 (닥터의 이전 코드 조각 기반):
-            dodgeAcceleration *= 0.8f;
-            if (rb != null && playerDirection != Vector3.zero)
-            {
-                rb.velocity = new Vector3(playerDirection.x * dodgeAcceleration, 0f, playerDirection.z * dodgeAcceleration);
-            }
-            if (dodgeAcceleration < 0.1f && isDodge) // isDodge를 한번 더 체크하여 중복 호출 방지
-            {
-                PlayerDodgeEnd(); // 애니메이션 이벤트 외의 강제 종료 조건 (선택 사항)
-            }
-            return; // 회피 중에는 다른 행동 명령 처리 안 함
+            return;
         }
 
-        // (이제 isDodge가 false인 상황)
+        if (Input.GetKey(KeyCode.A)) { moveX = -1; }
+        else if (Input.GetKey(KeyCode.D)) { moveX = 1; }
+        if (Input.GetKey(KeyCode.W)) { moveZ = 1; }
+        else if (Input.GetKey(KeyCode.S)) { moveZ = -1; }
 
-        // 2. 새로운 '회피 명령' 처리 (`dodgeDiscreteAction == 1`)
-        //    (공격 중이 아닐 때만 새로운 회피 가능)
-        if (Input.GetKey(KeyCode.Space) && !agentIsAttack)
+        if (Input.GetKeyDown(KeyCode.Space) && !isAttack && !isDodge)
         {
-            // 회피 방향 결정 ("마지막 입력의 벡터 받아서 사용" 또는 현재 이동 입력)
-            Vector3 currentMoveIntent = new Vector3(moveX, 0f, moveZ);
-            if (currentMoveIntent.sqrMagnitude > 0.01f)
+            Dodge();
+        }
+        if (Input.GetKeyDown(KeyCode.Mouse0) && !isAttack && !isDodge)
+        {
+            Charge();
+        }
+        if (isAttack && !chargeEnd)
+        {
+            if (Input.GetKeyUp(KeyCode.Mouse0))
             {
-                playerDirection = currentMoveIntent.normalized;
+                triggerAttack = true;
+                chargeEnd = true;
             }
-            else if (agentHitboxController != null)
+        }
+        if (isDodge)
+        {
+            rb.velocity = new Vector3(moveDirection.x * dodgeAcceleration, 0f, moveDirection.z * dodgeAcceleration);
+            dodgeAcceleration *= 0.93f;
+
+            if (dodgeAcceleration <= 0.3f)
             {
-                playerDirection = agentHitboxController.forward;
+                invincible = false;
+            }
+
+            if (dodgeAcceleration <= 0.25f)
+            {
+                DodgeEnd();
+            }
+            return;
+        }
+
+        if (isAttack)
+        {
+            if (chargeTime >= 3.5f)
+            {
+                triggerAttack = true;
+            }
+
+            if (triggerAttack)
+            {
+
+                playerSprite.SetTrigger("playerAttack");
+                triggerAttack = false;
             }
             else
             {
-                playerDirection = transform.forward;
-            }
-            
-            PlayerDodge(); // 닥터의 PlayerDodge() 함수 호출
-            return; 
-        }
-
-        // 3. 새로운 '공격 명령' 처리 (`attackDiscreteAction == 1`)
-        //    (회피 명령이 없었고, 회피 중도 아니고, 이미 공격 중도 아닐 때)
-        if (Input.GetKey(KeyCode.Mouse0) && !agentIsAttack) 
-        {
-            AddReward(penaltyForEachAttackAttempt);
-            bool aimedWell = false;
-            if (tyr != null && agentHitboxController != null)
-            {
-                Vector3 attackOrigin = agentHitboxController.position;
-                Vector3 directionToTyr = (tyr.transform.position - attackOrigin).normalized;
-                float dotProduct = Vector3.Dot(agentHitboxController.forward, directionToTyr);
-                float distanceToTyrActual = Vector3.Distance(attackOrigin, tyr.transform.position);
-
-                if (distanceToTyrActual <= agentAttackEffectiveRange && dotProduct >= attackAngleDotThreshold)
+                chargeTime += Time.deltaTime;
+                attackDamage = chargeTime * 2f;
+                if (chargeTime >= 2.5f)
                 {
-                    aimedWell = true;
-                    AddReward(rewardForWellAimedAttempt);
+                    attackDamage = 2f;
                 }
             }
-
-            if (animator != null)
-            {
-                animator.SetTrigger("playerAttack");
-                agentIsAttack = true;
-                if (aimedWell) { Debug.Log("[PlayerAgent] OnActionReceived: 잘 조준된 공격 실행!"); }
-                else { Debug.LogWarning("[PlayerAgent] OnActionReceived: 조준이 좋지 않은 공격 실행!"); }
-            }
-            else { Debug.LogWarning("[PlayerAgent] OnActionReceived: Animator가 null이어서 공격 애니메이션을 실행할 수 없습니다.", this); }
-            return; 
-        }
-        
-        if (rb == null) return;
-        Vector3 moveDirectionInput = new Vector3(moveX, 0f, moveZ);
-        rb.velocity = new Vector3(moveDirectionInput.normalized.x * 5, rb.velocity.y, moveDirectionInput.normalized.z * 5);
-        
-        // 일반 이동 시에도 playerDirection 업데이트 (다음 회피 시 "마지막 이동 입력 벡터"로 사용하기 위해)
-        if (moveDirectionInput.sqrMagnitude > 0.01f)
-        {
-        playerDirection = moveDirectionInput.normalized; 
+            return;
         }
 
-        if (animator != null)
+        float curentSpeed = new Vector2(moveX, moveZ).magnitude;
+        playerSprite.SetFloat("playerWalkSpeed", curentSpeed);
+        if (curentSpeed > 0)
         {
-            float currentActualSpeed = new Vector2(rb.velocity.x, rb.velocity.z).magnitude;
-            animator.SetFloat("playerWalkSpeed", currentActualSpeed);
-            if (moveDirectionInput.sqrMagnitude > 0.01f)
-            {
-                AddReward(rewardWalk);
-                animator.SetFloat("playerDirectionX", moveX);
-                animator.SetFloat("playerDirectionY", moveZ);
-            }
+            playerSprite.SetFloat("playerDirectionX", moveX);
+            playerSprite.SetFloat("playerDirectionY", moveZ);
+            moveDirection = new Vector3(moveX, 0f, moveZ).normalized;
+            rb.velocity = moveDirection * 3f;
         }
-        if (agentHitboxController != null)
-        {
-            if (Mathf.Abs(moveX) > 0.01f)
-            { agentHitboxController.localRotation = Quaternion.Euler(0, (moveX > 0.01f) ? 0f : 180f, 0); }
-            else if (Mathf.Abs(moveZ) > 0.01f)
-            { agentHitboxController.localRotation = Quaternion.Euler(0, -moveZ * 90f, 0); }
-        }
-        
     }
 
     public override void OnActionReceived(ActionBuffers actions)
@@ -344,7 +298,7 @@ public class PlayerAgent : Agent
             }
             if (dodgeAcceleration < 0.1f && isDodge) // isDodge를 한번 더 체크하여 중복 호출 방지
             {
-                PlayerDodgeEnd(); // 애니메이션 이벤트 외의 강제 종료 조건 (선택 사항)
+                DodgeEnd(); // 애니메이션 이벤트 외의 강제 종료 조건 (선택 사항)
             }
             return; // 회피 중에는 다른 행동 명령 처리 안 함
         }
@@ -370,7 +324,7 @@ public class PlayerAgent : Agent
                 playerDirection = transform.forward;
             }
             
-            PlayerDodge(); // 닥터의 PlayerDodge() 함수 호출
+            Dodge(); // 닥터의 Dodge() 함수 호출
             return; 
         }
 
@@ -394,14 +348,14 @@ public class PlayerAgent : Agent
                 }
             }
 
-            if (animator != null)
+            if (playerSprite != null)
             {
-                animator.SetTrigger("playerAttack");
+                playerSprite.SetTrigger("playerAttack");
                 agentIsAttack = true;
                 if (aimedWell) { Debug.Log("[PlayerAgent] OnActionReceived: 잘 조준된 공격 실행!"); }
                 else { Debug.LogWarning("[PlayerAgent] OnActionReceived: 조준이 좋지 않은 공격 실행!"); }
             }
-            else { Debug.LogWarning("[PlayerAgent] OnActionReceived: Animator가 null이어서 공격 애니메이션을 실행할 수 없습니다.", this); }
+            else { Debug.LogWarning("[PlayerAgent] OnActionReceived: playerSprite가 null이어서 공격 애니메이션을 실행할 수 없습니다.", this); }
             return; 
         }
 
@@ -425,15 +379,15 @@ public class PlayerAgent : Agent
                 playerDirection = moveDirectionInput.normalized;
             }
 
-        if (animator != null)
+        if (playerSprite != null)
         {
             float currentActualSpeed = new Vector2(rb.velocity.x, rb.velocity.z).magnitude;
-            animator.SetFloat("playerWalkSpeed", currentActualSpeed);
+            playerSprite.SetFloat("playerWalkSpeed", currentActualSpeed);
             if (moveDirectionInput.sqrMagnitude > 0.01f)
             {
                 AddReward(rewardWalk);
-                animator.SetFloat("playerDirectionX", moveX);
-                animator.SetFloat("playerDirectionY", moveZ);
+                playerSprite.SetFloat("playerDirectionX", moveX);
+                playerSprite.SetFloat("playerDirectionY", moveZ);
             }
         }
         if (agentHitboxController != null)
@@ -454,11 +408,11 @@ public class PlayerAgent : Agent
             Debug.Log("회피성공");
             return;
         }
-        if (!isInvincible && other.CompareTag("TyrAttackCollider"))
+        if (!invincible && other.CompareTag("TyrAttackCollider"))
         {
             float damageReceived = 1f; // Tyr의 공격에 의한 기본 피해량
             PlayerTookDamage(damageReceived);
-            isInvincible = true;
+            invincible = true;
             StartCoroutine(ResetInvincibility());
         }
     }
@@ -466,7 +420,7 @@ public class PlayerAgent : Agent
     IEnumerator ResetInvincibility()
     {
         yield return new WaitForSeconds(invincibilityDuration);
-        isInvincible = false;
+        invincible = false;
     }
 
     public void PlayerTookDamage(float damageAmount)
@@ -481,17 +435,26 @@ public class PlayerAgent : Agent
             EndEpisode();
         }
     }
-    public void PlayerDodge()
+    public void Dodge()
     {
-        animator.SetTrigger("playerDodge");
+        playerSprite.SetTrigger("playerDodge");
         AddReward(penaltyDodge);
         isDodge = true;
         Debug.Log("회피 시도");
     }
-    public void PlayerDodgeEnd()
+    public void DodgeEnd()
     {
         isDodge = false;
-        dodgeAcceleration = 10;
+        dodgeAcceleration = 10f;
+    }
+    private void Charge()
+    {
+        isAttack = true;
+        playerSprite.SetTrigger("playerCharge");
+        chargeTime = 0f;
+        triggerAttack = false;
+        attackDamage = 1f;
+        chargeEnd = false;
     }
 
     public void PlayerHitTyr(float damageDealtToTyr) // TyrController에서 호출

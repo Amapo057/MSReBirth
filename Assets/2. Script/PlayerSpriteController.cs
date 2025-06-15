@@ -3,6 +3,7 @@ using UnityEngine;
 public class PlayerSpriteController : MonoBehaviour
 {
     public PlayerController playerController;
+    public PlayerAgent PlayerAgent;
     // Start is called before the first frame update
     void Start()
     {
@@ -16,10 +17,12 @@ public class PlayerSpriteController : MonoBehaviour
     }
     public void CallAttackEnd()
     {
-        playerController.AttackEnd();
+        // playerController.AttackEnd();
+        PlayerAgent.AttackEnd();
     }
     public void CallHitEnd()
     {
-        playerController.HitEnd();
+        // playerController.HitEnd();
+        PlayerAgent.HitEnd();
     }
 }

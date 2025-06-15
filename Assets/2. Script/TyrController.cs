@@ -11,7 +11,7 @@ public class TyrController : MonoBehaviour
     private Animator anim;
     public SpriteRenderer body;
     public SpriteRenderer Leg;
-    // public PlayerAgent playerAgent;
+    public PlayerAgent playerAgent;
     public PlayerController playerController;
     public CameraShaker cameraShaker;
     Rigidbody rb;
@@ -81,7 +81,8 @@ public class TyrController : MonoBehaviour
     {
         if (other.CompareTag("PlayerAttackCollider") && !isInvincible)
         {
-            float damage = playerController.attackDamage;
+            // float damage = playerController.attackDamage;
+            float damage = playerAgent.attackDamage;
             tyrHp -= damage;
             if (spakePrefab != null)
             {
@@ -104,7 +105,7 @@ public class TyrController : MonoBehaviour
 
             isInvincible = true;
             StartCoroutine(ResetInvincibility());
-            // playerAgent.PlayerHitTyr(-1);
+            playerAgent.PlayerHitTyr(-damage);
         }
         if (tyrHp <= 0)
         {
